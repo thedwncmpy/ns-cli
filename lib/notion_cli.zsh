@@ -30,6 +30,52 @@ notion_download_usage() {
   echo "Usage: notion download <file.md>"
 }
 
+# NOTE: Slice 4 skeleton
+# - Secrets source precedence: NOTION_TOKEN env var > secrets file
+# - Secrets file default: ~/.config/notion-cli/secrets.zsh
+# - Do not persist secrets into project config JSON
+
+notion_default_secrets_path() {
+  echo "$HOME/.config/notion-cli/secrets.zsh"
+}
+
+notion_load_token() {
+  local token="${NOTION_TOKEN-}"
+  token="${token#"${token%%[![:space:]]*}"}"
+  token="${token%"${token##*[![:space:]]}"}"
+
+  if [[ -n "${token}" ]]; then 
+    echo "$token"
+    return 0
+  fi
+
+  local secrets_path
+  secrets_path="$(notion_default_secrets_path)"
+  [[ -f "$secrets_path" ]] && source "$secrets_path"
+
+  token="${NOTION_TOKEN-}"
+  token="${token#"${token%%[![:space:]]*}"}"
+  token="${token%"${token##*[![:space:]]}"}"
+
+
+  if [[ -n "${token}" ]]; then 
+    echo "$token"
+    return 0
+  fi
+  
+  return 1
+}
+
+notion_require_token() {
+  local res
+  if ! res="$(notion_load_token)"; then
+    echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)"
+    return 1
+  fi 
+
+  echo "$res"
+}
+
 json_escape() {
   local value="$1"
   value="${value//\\/\\\\}"
