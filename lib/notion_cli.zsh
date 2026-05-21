@@ -13,7 +13,6 @@ Commands:
   help       Show this help
 USAGE
 }
-
 notion_init_usage() {
   echo "Usage: notion init --database-id <id> --notes-root <path> [--force]"
 }
@@ -30,11 +29,6 @@ notion_download_usage() {
   echo "Usage: notion download <file.md>"
 }
 
-# NOTE: Slice 4 skeleton
-# - Secrets source precedence: NOTION_TOKEN env var > secrets file
-# - Secrets file default: ~/.config/notion-cli/secrets.zsh
-# - Do not persist secrets into project config JSON
-
 notion_default_secrets_path() {
   echo "$HOME/.config/notion-cli/secrets.zsh"
 }
@@ -42,6 +36,7 @@ notion_default_secrets_path() {
 notion_load_token() {
   local token="${NOTION_TOKEN-}"
   token="${token#"${token%%[![:space:]]*}"}"
+  token="${token%"${token##*[![:space:]]}"}"
   token="${token%"${token##*[![:space:]]}"}"
 
   if [[ -n "${token}" ]]; then 
@@ -72,7 +67,7 @@ notion_require_token() {
     echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)"
     return 1
   fi 
-
+  
   echo "$res"
 }
 
@@ -257,9 +252,170 @@ notion_cmd_upload() {
     return 0
   fi
 
-  echo "Error: 'notion upload' is not implemented yet in this slice."
-  echo "Run: notion upload --help"
-  return 1
+  # NOTE: Slice 5 upload flow:
+  
+  # 1) Validate required <file.md> argument.
+  local file="${1:-}"
+  if [[ -z "$file" ]]; then
+    echo "Error: upload requires <file.md>"
+    notion_upload_usage
+    return 1
+  fi
+
+  # 2) Validate file exists and has .md extension.
+  local abs_file="${file:A}"
+  if [[ ! -f "$abs_file" ]]; then
+    echo "Error: file not found: $file"
+    return 1
+  fi
+
+  if [[ "$abs_file" != *.md ]]; then
+    echo "Error: upload only supports .md files"
+    return 1
+  fi
+
+  # 3) Locate config via find_config; read notes_root + mappings.
+  local config_path
+  config_path="$(find_config)" || {
+   echo "Error: No project config found. Run 'notion init' first."
+    return 1
+  }
+
+  # 4) Ensure file is inside notes_root.
+  local notes_root
+  notes_root="$(jq -r '.notes_root' "$config_path")"
+  local abs_notes_root="${notes_root:A}"
+  if [[ "$abs_file" != "$abs_notes_root/"* ]]; then
+    echo "Error: file must be inside notes_root: $abs_notes_root"
+    return 1
+  fi
+  
+  # 5) Resolve first-level segment and require mapping.
+  local relative_path first_segment
+  relative_path="${abs_file#$abs_notes_root/}"
+  first_segment="${relative_path%%/*}"
+
+  local relation_page_id
+  relation_page_id="$(jq -r --arg seg "$first_segment" '.mappings[$seg] // empty' "$config_path")"
+  if [[ -z "$relation_page_id" ]]; then
+    echo "Error: no mapping found for first-level directory '$first_segment'"
+    return 1
+  fi
+
+  # 6) Require token via notion_require_token.
+  if ! notion_require_token; then
+    return 1
+  fi
+
+  local notion_token
+  notion_token="$(notion_require_token)"
+
+  local database_id
+  database_id="$(jq -r '.database_id // empty' "$config_path")"
+  if [[ -z "$database_id" ]]; then
+    echo "Error: database_id missing in config. Re-run notion init."
+    return 1
+  fi
+
+  local title
+  title="$(basename "$abs_file" .md)"
+
+  # 7) Parse markdown with notion_parser.py and perform Notion API query/update/create.
+  local script_dir="${0:A:h}"
+  local parser_path="${NOTION_PARSER_PATH:-$script_dir/../lib/notion_parser.py}"
+  if [[ ! -f "$parser_path" ]]; then
+    echo "Error: notion parser not found at $parser_path"
+    echo "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
+    return 1
+  fi
+
+  local blocks
+  if ! blocks="$(python3 "$parser_path" "$abs_file")"; then
+    echo "Error: failed to parse markdown with $parser_path"
+    return 1
+  fi
+
+  local filter search_response
+  filter="$(jq -n --arg title "$title" --arg relation "$relation_page_id" '{
+    filter: {
+      and: [
+        { property: "Name", title: { equals: $title } },
+        { property: "notebook", relation: { contains: $relation } }
+      ]
+    }
+  }')"
+
+  search_response="$(curl -sS -X POST "https://api.notion.com/v1/databases/$database_id/query" \
+    -H "Authorization: Bearer $notion_token" \
+    -H "Notion-Version: 2022-06-28" \
+    -H "Content-Type: application/json" \
+    --data "$filter")"
+
+  if echo "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion query failed: $(echo "$search_response" | jq -r '.message')"
+    return 1
+  fi
+
+  # 8) Hard fail ambiguous exact matches (title + relation).
+  local match_count
+  match_count="$(echo "$search_response" | jq '.results | length')"
+  if [[ "$match_count" -gt 1 ]]; then
+    echo "Error: ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
+    echo "Refine remote data so only one exact title+relation page exists."
+    return 1
+  fi
+
+  local page_id response
+  page_id="$(echo "$search_response" | jq -r '.results[0].id // empty')"
+
+  if [[ -n "$page_id" ]]; then
+    local existing_blocks block_id payload
+    existing_blocks="$(curl -sS -X GET "https://api.notion.com/v1/blocks/$page_id/children" \
+      -H "Authorization: Bearer $notion_token" \
+      -H "Notion-Version: 2022-06-28" | jq -r '.results[].id')"
+
+    for block_id in ${(f)existing_blocks}; do
+      curl -sS -X DELETE "https://api.notion.com/v1/blocks/$block_id" \
+        -H "Authorization: Bearer $notion_token" \
+        -H "Notion-Version: 2022-06-28" >/dev/null
+    done
+
+    payload="$(jq -n --argjson child_blocks "$blocks" '{children: $child_blocks}')"
+    response="$(curl -sS -X PATCH "https://api.notion.com/v1/blocks/$page_id/children" \
+      -H "Authorization: Bearer $notion_token" \
+      -H "Notion-Version: 2022-06-28" \
+      -H "Content-Type: application/json" \
+      --data "$payload")"
+  else
+    local payload
+    payload="$(jq -n \
+      --arg db "$database_id" \
+      --arg rel "$relation_page_id" \
+      --arg page_title "$title" \
+      --argjson child_blocks "$blocks" \
+      '{
+        parent: { database_id: $db },
+        properties: {
+          Name: { title: [{ text: { content: $page_title } }] },
+          notebook: { relation: [{ id: $rel }] }
+        },
+        children: $child_blocks
+      }')"
+
+    response="$(curl -sS -X POST "https://api.notion.com/v1/pages" \
+      -H "Authorization: Bearer $notion_token" \
+      -H "Notion-Version: 2022-06-28" \
+      -H "Content-Type: application/json" \
+      --data "$payload")"
+  fi
+
+  if echo "$response" | jq -e '.object == "error"' >/dev/null; then
+    echo "Error: Notion sync failed: $(echo "$response" | jq -r '.message')"
+    return 1
+  fi
+
+  echo "Uploaded '$title' successfully."
+  return 0
 }
 
 notion_cmd_download() {
