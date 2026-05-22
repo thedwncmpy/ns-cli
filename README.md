@@ -1,0 +1,105 @@
+# notion-cli
+
+`notion-cli` is a lightweight command-line tool for strict two-way sync between local markdown files and a Notion database.
+
+The MVP keeps sync behavior deterministic:
+- Exact filename-stem to Notion title matching
+- First-level directory to relation mapping
+- Strict failures on ambiguity/mismatch
+- Single command surface: `notion`
+
+## Install
+
+From your Homebrew tap:
+
+```bash
+brew tap thedwncmpy/homebrew-notion-cli
+brew install thedwncmpy/homebrew-notion-cli/notion
+```
+
+If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
+
+## What It Does
+
+- Stores project config in `.notion-cli/config.json`
+- Keeps secrets separate via `NOTION_TOKEN` (env) or `~/.config/notion-cli/secrets.zsh`
+- Uploads local markdown to matching Notion pages
+- Downloads Notion pages into local markdown files (create or overwrite)
+
+## Command Overview
+
+```bash
+notion init --database-id <id> --notes-root <path> [--force]
+notion link <subdir> <relation_page_id> <relation_property> [--force]
+notion upload <file.md>
+notion download <file.md>
+```
+
+## Quick Start
+
+1. Export your Notion token:
+
+```bash
+export NOTION_TOKEN="secret_xxx"
+```
+
+2. Initialize a project:
+
+```bash
+notion init --database-id <notion_db_id> --notes-root ./notes
+```
+
+3. Map a first-level folder to a relation page id + relation property:
+
+```bash
+notion link project rel_123 notebook
+```
+
+4. Upload a note:
+
+```bash
+notion upload ./notes/project/today.md
+```
+
+5. Download a note (creates or overwrites local file):
+
+```bash
+notion download ./notes/project/today.md
+```
+
+## Config Shape
+
+Example `.notion-cli/config.json`:
+
+```json
+{
+  "version": 1,
+  "database_id": "db_test",
+  "notes_root": "/absolute/path/to/notes",
+  "mappings": {
+    "project": {
+      "relation_page_id": "rel_123",
+      "relation_property": "notebook"
+    }
+  }
+}
+```
+
+Legacy mapping values are still supported for compatibility:
+
+```json
+"mappings": {
+  "project": "rel_123"
+}
+```
+
+In legacy mode, relation property defaults to `notebook`.
+
+## Guardrails
+
+- `upload`/`download` require `.md`
+- Target file must be inside configured `notes_root`
+- Mapping must exist for the first-level directory
+- Exact title + mapped relation query only
+- Ambiguous matches fail hard
+
