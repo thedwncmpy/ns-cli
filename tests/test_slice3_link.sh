@@ -48,7 +48,7 @@ assert_contains "$out" "Usage: notion link"
 
 # 3. Test: Link non-existent directory should fail
 set +e
-out="$($CLI link missing_dir page_123 2>&1)"
+out="$($CLI link missing_dir page_123 notebook 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1
@@ -57,41 +57,45 @@ assert_contains "$out" "directory does not exist"
 # 4. Test: Link valid directory should succeed
 mkdir "projects"
 set +e
-out="$($CLI link projects page_projects 2>&1)"
+out="$($CLI link projects page_projects notebook 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$out" "Linked 'projects' to 'page_projects'"
+assert_contains "$out" "Linked 'projects' to 'page_projects' using property 'notebook'"
 
 config_path=".notion-cli/config.json"
-actual_mapping="$(jq -r '.mappings.projects' "$config_path")"
+actual_mapping="$(jq -r '.mappings.projects.relation_page_id' "$config_path")"
 [[ "$actual_mapping" == "page_projects" ]] || fail "expected mapping page_projects, got: $actual_mapping"
+actual_property="$(jq -r '.mappings.projects.relation_property' "$config_path")"
+[[ "$actual_property" == "notebook" ]] || fail "expected mapping property notebook, got: $actual_property"
 
 # 5. Test: Link already mapped directory without --force should fail
 set +e
-out="$($CLI link projects page_new 2>&1)"
+out="$($CLI link projects page_new notebook 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1
 assert_contains "$out" "already mapped"
-actual_mapping="$(jq -r '.mappings.projects' "$config_path")"
+actual_mapping="$(jq -r '.mappings.projects.relation_page_id' "$config_path")"
 [[ "$actual_mapping" == "page_projects" ]] || fail "mapping changed without --force"
 
 # 6. Test: Link already mapped directory with --force should succeed
 set +e
-out="$($CLI link projects page_new --force 2>&1)"
+out="$($CLI link projects page_new tasks --force 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$out" "Linked 'projects' to 'page_new'"
-actual_mapping="$(jq -r '.mappings.projects' "$config_path")"
+assert_contains "$out" "Linked 'projects' to 'page_new' using property 'tasks'"
+actual_mapping="$(jq -r '.mappings.projects.relation_page_id' "$config_path")"
 [[ "$actual_mapping" == "page_new" ]] || fail "mapping did not change with --force"
+actual_property="$(jq -r '.mappings.projects.relation_property' "$config_path")"
+[[ "$actual_property" == "tasks" ]] || fail "mapping property did not change with --force"
 
 # 7. Test: Link when NOT in a project directory should fail
 mkdir -p "$tmp_dir/other"
 cd "$tmp_dir/other"
 set +e
-out="$($CLI link sub page_sub 2>&1)"
+out="$($CLI link sub page_sub notebook 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1

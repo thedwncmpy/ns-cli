@@ -20,7 +20,7 @@ notion_init_usage() {
 }
 
 notion_link_usage() {
-  echo "Usage: notion link <subdir> <relation_page_id> [--force]"
+  echo "Usage: notion link <subdir> <relation_page_id> <relation_property> [--force]"
 }
 
 notion_upload_usage() {
@@ -72,7 +72,7 @@ notion_require_token() {
   if ! res="$(notion_load_token)"; then
     echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)" >&2
     return 1
-  fi 
+  fi
 
   echo "$res"
 }
@@ -178,6 +178,7 @@ find_config() {
 notion_cmd_link() {
   local subdir=""
   local relation_page_id=""
+  local relation_property=""
   local force=0
 
   while [[ $# -gt 0 ]]; do
@@ -200,6 +201,8 @@ notion_cmd_link() {
         subdir="$1"
       elif [[ -z "$relation_page_id" ]]; then
         relation_page_id="$1"
+      elif [[ -z "$relation_property" ]]; then
+        relation_property="$1"
       else
         echo "Error: too many arguments for link"
         notion_link_usage
@@ -210,8 +213,8 @@ notion_cmd_link() {
     esac
   done
 
-  if [[ -z "$subdir" || -z "$relation_page_id" ]]; then
-    echo "Error: <subdir> and <relation_page_id> are required"
+  if [[ -z "$subdir" || -z "$relation_page_id" || -z "$relation_property" ]]; then
+    echo "Error: <subdir> <relation_page_id> <relation_property> are required"
     notion_link_usage
     return 1
   fi
@@ -231,7 +234,7 @@ notion_cmd_link() {
   fi
 
   local existing_mapping
-  existing_mapping="$(jq -r ".mappings.\"$subdir\" // empty" "$config_path")"
+  existing_mapping="$(jq -r ".mappings.\"$subdir\".relation_page_id // .mappings.\"$subdir\" // empty" "$config_path")"
 
   if [[ -n "$existing_mapping" && $force -ne 1 ]]; then
     echo "Error: '$subdir' is already mapped to '$existing_mapping' (use --force to overwrite)"
@@ -245,11 +248,11 @@ notion_cmd_link() {
   # Use a temporary file to update the config
   local tmp_cfg
   tmp_cfg="$(mktemp)"
-  jq --arg subdir "$subdir" --arg relation "$relation_page_id" \
-    '.mappings[$subdir] = $relation' "$config_path" >"$tmp_cfg"
+  jq --arg subdir "$subdir" --arg relation "$relation_page_id" --arg property "$relation_property" \
+    '.mappings[$subdir] = { relation_page_id: $relation, relation_property: $property }' "$config_path" >"$tmp_cfg"
   mv "$tmp_cfg" "$config_path"
 
-  echo "Linked '$subdir' to '$relation_page_id' in $config_path"
+  echo "Linked '$subdir' to '$relation_page_id' using property '$relation_property' in $config_path"
 }
 
 notion_cmd_upload() {
@@ -301,8 +304,9 @@ notion_cmd_upload() {
   relative_path="${abs_file#$abs_notes_root/}"
   first_segment="${relative_path%%/*}"
 
-  local relation_page_id
-  relation_page_id="$(jq -r --arg seg "$first_segment" '.mappings[$seg] // empty' "$config_path")"
+  local relation_page_id relation_property
+  relation_page_id="$(jq -r --arg seg "$first_segment" '.mappings[$seg].relation_page_id // .mappings[$seg] // empty' "$config_path")"
+  relation_property="$(jq -r --arg seg "$first_segment" '.mappings[$seg].relation_property // "notebook"' "$config_path")"
   if [[ -z "$relation_page_id" ]]; then
     echo "Error: no mapping found for first-level directory '$first_segment'"
     return 1
@@ -343,11 +347,11 @@ notion_cmd_upload() {
   fi
 
   local filter search_response
-  filter="$(jq -n --arg title "$title" --arg relation "$relation_page_id" '{
+  filter="$(jq -n --arg title "$title" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
     filter: {
       and: [
         { property: "Name", title: { equals: $title } },
-        { property: "notebook", relation: { contains: $relation } }
+        { property: $rel_prop, relation: { contains: $relation } }
       ]
     }
   }')"
@@ -431,16 +435,6 @@ notion_cmd_download() {
     notion_download_usage
     return 0
   fi
-  # TODO: implement function
-
-  # [x] Require `.md` input path.
-  # [x] Require target path inside configured `notes_root`.
-  # [x] Resolve relation from first-level segment and require mapping.
-  # [x] Query by exact title + mapped relation.
-  # [] If local file exists and unique remote page exists: overwrite local file.
-  # [] If local file missing and unique remote page exists: create local file (including parent dirs).
-  # [] If no remote match: fail non-zero.
-  # [] If multiple matches: fail non-zero with ambiguity guidance.
 
   local target="${1:-}"
 
@@ -497,8 +491,9 @@ notion_cmd_download() {
   fi
   local first_seg="${relative_path%%/*}"
 
-  local relation_page_id
-  relation_page_id="$(jq -r --arg seg "$first_seg" '.mappings[$seg] // empty' "$config_path")"
+  local relation_page_id relation_property
+  relation_page_id="$(jq -r --arg seg "$first_seg" '.mappings[$seg].relation_page_id // .mappings[$seg] // empty' "$config_path")"
+  relation_property="$(jq -r --arg seg "$first_seg" '.mappings[$seg].relation_property // "notebook"' "$config_path")"
 
   if [[ -z "$relation_page_id" ]]; then
     echo "Error: no mapping found for first-level directory '$first_seg'"
@@ -517,11 +512,11 @@ notion_cmd_download() {
   fi
 
   local query_payload search_response
-  query_payload="$(jq -n --arg title "$abs_target_name" --arg relation "$relation_page_id" '{
+  query_payload="$(jq -n --arg title "$abs_target_name" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
     filter: {
       and: [
         { property: "Name", title: { equals: $title } },
-        { property: "notebook", relation: { contains: $relation } }
+        { property: $rel_prop, relation: { contains: $relation } }
       ]
     }
   }')"

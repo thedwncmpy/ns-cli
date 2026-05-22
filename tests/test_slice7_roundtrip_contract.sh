@@ -37,7 +37,7 @@ notes_root="$tmp_dir/notes"
 mkdir -p "$notes_root/project"
 
 $CLI init --database-id db_test --notes-root "$notes_root" >/dev/null
-(cd "$notes_root" && $CLI link project rel_123 >/dev/null)
+(cd "$notes_root" && $CLI link project rel_123 relation_prop >/dev/null)
 
 # Fake parser and API harness for deterministic contract tests.
 bin_dir="$tmp_dir/bin"
@@ -60,6 +60,7 @@ cat > "$bin_dir/curl" <<'CURL'
 #!/usr/bin/env bash
 set -euo pipefail
 args="$*"
+printf "%s\n" "$args" >> "${SLICE7_CURL_LOG:?}"
 
 if [[ "$args" == *"/v1/databases/"*"/query"* ]]; then
   if [[ "$args" == *"note-roundtrip"* || "$args" == *"new-note"* ]]; then
@@ -85,6 +86,9 @@ printf '# parser stub path marker\n' > "$parser_stub"
 export PATH="$bin_dir:$PATH"
 export NOTION_TOKEN="test_token"
 export NOTION_PARSER_PATH="$parser_stub"
+export SLICE7_CURL_LOG="$tmp_dir/curl.log"
+
+assert_contains "$(cat "$notes_root/.notion-cli/config.json")" "\"relation_property\": \"relation_prop\""
 
 note_rel="project/note-roundtrip.md"
 note_path="$notes_root/$note_rel"
@@ -92,12 +96,14 @@ printf "seed\n" > "$note_path"
 
 out="$(cd "$notes_root" && "$CLI" upload "$note_rel" 2>&1)"
 assert_contains "$out" "Uploaded 'note-roundtrip' successfully."
+assert_contains "$(cat "$SLICE7_CURL_LOG")" "\"property\": \"relation_prop\""
 
 # Overwrite existing local file from remote.
 printf "local-stale\n" > "$note_path"
 out="$(cd "$notes_root" && "$CLI" download "$note_rel" 2>&1)"
 assert_contains "$out" "Downloaded 'note-roundtrip'"
 assert_file_eq "$note_path" $'# title\nroundtrip-body'
+assert_contains "$(cat "$SLICE7_CURL_LOG")" "\"property\": \"relation_prop\""
 
 # Create missing local file when remote exists.
 missing_path="$notes_root/project/new-note.md"

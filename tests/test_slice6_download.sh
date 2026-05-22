@@ -36,7 +36,7 @@ mkdir -p "$notes_root/project"
 
 # Bootstrap config + mapping for test preconditions.
 $CLI init --database-id db_test --notes-root "$notes_root" >/dev/null
-(cd "$notes_root" && $CLI link project rel_123 >/dev/null)
+(cd "$notes_root" && $CLI link project rel_123 notebook >/dev/null)
 
 # Help should work
 set +e
