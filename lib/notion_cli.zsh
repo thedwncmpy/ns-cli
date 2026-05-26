@@ -432,6 +432,7 @@ notion_cmd_upload() {
     payload="$(jq -n \
       --arg db "$database_id" \
       --arg rel "$relation_page_id" \
+      --arg rel_prop "$relation_property" \
       --arg page_title "$title" \
       --argjson first_chunk_count "$first_chunk_count" \
       --slurpfile child_blocks "$tmp_blocks" \
@@ -439,7 +440,7 @@ notion_cmd_upload() {
         parent: { database_id: $db },
         properties: {
           Name: { title: [{ text: { content: $page_title } }] },
-          notebook: { relation: [{ id: $rel }] }
+          ($rel_prop): { relation: [{ id: $rel }] }
         },
         children: ($child_blocks[0][0:$first_chunk_count])
       }')"

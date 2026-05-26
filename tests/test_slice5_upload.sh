@@ -2,10 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    notion_upload_usage
-    return 0
-  fi
 CLI="$ROOT_DIR/bin/notion"
 
 fail() {

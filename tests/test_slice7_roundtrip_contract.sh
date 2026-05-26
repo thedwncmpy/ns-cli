@@ -111,4 +111,12 @@ out="$(cd "$notes_root" && "$CLI" download "project/new-note.md" 2>&1)"
 assert_contains "$out" "Downloaded 'new-note'"
 assert_file_eq "$missing_path" $'# title\nroundtrip-body'
 
+# Create-path upload should honor mapped relation_property in page create payload.
+create_note_path="$notes_root/project/create-path.md"
+printf "new-content\n" > "$create_note_path"
+out="$(cd "$notes_root" && "$CLI" upload "project/create-path.md" 2>&1)"
+assert_contains "$out" "Uploaded 'create-path' successfully."
+assert_contains "$(cat "$SLICE7_CURL_LOG")" "\"relation_prop\": {"
+assert_contains "$(cat "$SLICE7_CURL_LOG")" "\"id\": \"rel_123\""
+
 echo "PASS: slice 7 roundtrip + contract harness"
