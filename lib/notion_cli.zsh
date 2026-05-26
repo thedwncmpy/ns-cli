@@ -87,6 +87,158 @@ json_escape() {
   echo "$value"
 }
 
+notion_api_request() {
+  local method="$1"
+  local url="$2"
+  local token="$3"
+  local data="${4-}"
+  local max_attempts=3
+  local attempt=1
+  local response=""
+  local curl_exit=0
+
+  while [[ "$attempt" -le "$max_attempts" ]]; do
+    if [[ -n "$data" ]]; then
+      set +e
+      response="$(curl -sS -X "$method" "$url" \
+        -H "Authorization: Bearer $token" \
+        -H "Notion-Version: 2022-06-28" \
+        -H "Content-Type: application/json" \
+        --data "$data")"
+      curl_exit=$?
+      set -e
+    else
+      set +e
+      response="$(curl -sS -X "$method" "$url" \
+        -H "Authorization: Bearer $token" \
+        -H "Notion-Version: 2022-06-28")"
+      curl_exit=$?
+      set -e
+    fi
+
+    if [[ "$curl_exit" -eq 0 ]]; then
+      if printf '%s' "$response" | jq -e '.object == "error" and (.code == "rate_limited" or .code == "service_unavailable" or .code == "internal_server_error")' >/dev/null 2>&1; then
+        if [[ "$attempt" -lt "$max_attempts" ]]; then
+          sleep "$attempt"
+          attempt=$((attempt + 1))
+          continue
+        fi
+      fi
+      echo "$response"
+      return 0
+    fi
+
+    if [[ "$attempt" -lt "$max_attempts" ]]; then
+      sleep "$attempt"
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "Error: Notion API request failed after $max_attempts attempts: $method $url" >&2
+    return 1
+  done
+}
+
+notion_query_all() {
+  local database_id="$1"
+  local token="$2"
+  local filter_payload="$3"
+  local cursor=""
+  local all='[]'
+  local response page_results has_more
+
+  while true; do
+    local payload="$filter_payload"
+    if [[ -n "$cursor" ]]; then
+      payload="$(printf '%s' "$filter_payload" | jq -c --arg cursor "$cursor" '. + {start_cursor: $cursor}')"
+    fi
+    response="$(notion_api_request "POST" "https://api.notion.com/v1/databases/$database_id/query" "$token" "$payload")" || return 1
+    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+      echo "$response"
+      return 0
+    fi
+    page_results="$(printf '%s' "$response" | jq '.results')"
+    all="$(jq -n --argjson a "$all" --argjson b "$page_results" '$a + $b')"
+    has_more="$(printf '%s' "$response" | jq -r '.has_more // false')"
+    if [[ "$has_more" != "true" ]]; then
+      break
+    fi
+    cursor="$(printf '%s' "$response" | jq -r '.next_cursor // empty')"
+    if [[ -z "$cursor" ]]; then
+      break
+    fi
+  done
+
+  jq -n --argjson results "$all" '{results: $results}'
+}
+
+notion_fetch_all_children_ids() {
+  local page_id="$1"
+  local token="$2"
+  local cursor=""
+  local ids=()
+  local response has_more
+
+  while true; do
+    local url="https://api.notion.com/v1/blocks/$page_id/children"
+    if [[ -n "$cursor" ]]; then
+      url="$url?start_cursor=$cursor"
+    fi
+    response="$(notion_api_request "GET" "$url" "$token")" || return 1
+    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+      echo "$response"
+      return 0
+    fi
+    local page_ids
+    page_ids="$(printf '%s' "$response" | jq -r '.results[].id')"
+    if [[ -n "$page_ids" ]]; then
+      ids+=("${(@f)page_ids}")
+    fi
+    has_more="$(printf '%s' "$response" | jq -r '.has_more // false')"
+    if [[ "$has_more" != "true" ]]; then
+      break
+    fi
+    cursor="$(printf '%s' "$response" | jq -r '.next_cursor // empty')"
+    if [[ -z "$cursor" ]]; then
+      break
+    fi
+  done
+
+  printf "%s\n" "${ids[@]-}"
+}
+
+notion_fetch_all_children_blocks() {
+  local page_id="$1"
+  local token="$2"
+  local cursor=""
+  local all='[]'
+  local response page_results has_more
+
+  while true; do
+    local url="https://api.notion.com/v1/blocks/$page_id/children"
+    if [[ -n "$cursor" ]]; then
+      url="$url?start_cursor=$cursor"
+    fi
+    response="$(notion_api_request "GET" "$url" "$token")" || return 1
+    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+      echo "$response"
+      return 0
+    fi
+    page_results="$(printf '%s' "$response" | jq '.results')"
+    all="$(jq -n --argjson a "$all" --argjson b "$page_results" '$a + $b')"
+    has_more="$(printf '%s' "$response" | jq -r '.has_more // false')"
+    if [[ "$has_more" != "true" ]]; then
+      break
+    fi
+    cursor="$(printf '%s' "$response" | jq -r '.next_cursor // empty')"
+    if [[ -z "$cursor" ]]; then
+      break
+    fi
+  done
+
+  jq -n --argjson results "$all" '{results: $results}'
+}
+
 notion_cmd_init() {
   local database_id=""
   local notes_root=""
@@ -365,11 +517,7 @@ notion_cmd_upload() {
     }
   }')"
 
-  search_response="$(curl -sS -X POST "https://api.notion.com/v1/databases/$database_id/query" \
-    -H "Authorization: Bearer $notion_token" \
-    -H "Notion-Version: 2022-06-28" \
-    -H "Content-Type: application/json" \
-    --data "$filter")"
+  search_response="$(notion_query_all "$database_id" "$notion_token" "$filter")" || return 1
 
   if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
     echo "Error: Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
@@ -393,14 +541,10 @@ notion_cmd_upload() {
 
   if [[ -n "$page_id" ]]; then
     local existing_blocks block_id payload
-    existing_blocks="$(curl -sS -X GET "https://api.notion.com/v1/blocks/$page_id/children" \
-      -H "Authorization: Bearer $notion_token" \
-      -H "Notion-Version: 2022-06-28" | jq -r '.results[].id')"
+    existing_blocks="$(notion_fetch_all_children_ids "$page_id" "$notion_token")" || return 1
 
     for block_id in ${(f)existing_blocks}; do
-      curl -sS -X DELETE "https://api.notion.com/v1/blocks/$block_id" \
-        -H "Authorization: Bearer $notion_token" \
-        -H "Notion-Version: 2022-06-28" >/dev/null
+      notion_api_request "DELETE" "https://api.notion.com/v1/blocks/$block_id" "$notion_token" >/dev/null || return 1
     done
 
     local start chunk_payload
@@ -410,11 +554,7 @@ notion_cmd_upload() {
         --argjson start "$start" \
         --slurpfile child_blocks "$tmp_blocks" \
         '{children: ($child_blocks[0][$start:($start+100)])}')"
-      response="$(curl -sS -X PATCH "https://api.notion.com/v1/blocks/$page_id/children" \
-        -H "Authorization: Bearer $notion_token" \
-        -H "Notion-Version: 2022-06-28" \
-        -H "Content-Type: application/json" \
-        --data "$chunk_payload")"
+      response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
       if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
         rm -f "$tmp_blocks"
         echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
@@ -445,11 +585,7 @@ notion_cmd_upload() {
         children: ($child_blocks[0][0:$first_chunk_count])
       }')"
 
-    response="$(curl -sS -X POST "https://api.notion.com/v1/pages" \
-      -H "Authorization: Bearer $notion_token" \
-      -H "Notion-Version: 2022-06-28" \
-      -H "Content-Type: application/json" \
-      --data "$payload")"
+    response="$(notion_api_request "POST" "https://api.notion.com/v1/pages" "$notion_token" "$payload")" || return 1
 
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
       rm -f "$tmp_blocks"
@@ -470,11 +606,7 @@ notion_cmd_upload() {
         --argjson start "$start" \
         --slurpfile child_blocks "$tmp_blocks" \
         '{children: ($child_blocks[0][$start:($start+100)])}')"
-      response="$(curl -sS -X PATCH "https://api.notion.com/v1/blocks/$page_id/children" \
-        -H "Authorization: Bearer $notion_token" \
-        -H "Notion-Version: 2022-06-28" \
-        -H "Content-Type: application/json" \
-        --data "$chunk_payload")"
+      response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
       if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
         rm -f "$tmp_blocks"
         echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
@@ -582,11 +714,7 @@ notion_cmd_download() {
     }
   }')"
 
-  search_response="$(curl -sS -X POST "https://api.notion.com/v1/databases/$database_id/query" \
-    -H "Authorization: Bearer $notion_token" \
-    -H "Notion-Version: 2022-06-28" \
-    -H "Content-Type: application/json" \
-    --data "$query_payload")"
+  search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
 
   if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
     echo "Error: Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
@@ -614,9 +742,7 @@ notion_cmd_download() {
   fi
 
   local blocks_response
-  blocks_response="$(curl -sS -X GET "https://api.notion.com/v1/blocks/$page_id/children" \
-    -H "Authorization: Bearer $notion_token" \
-    -H "Notion-Version: 2022-06-28")"
+  blocks_response="$(notion_fetch_all_children_blocks "$page_id" "$notion_token")" || return 1
 
   if printf '%s' "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
     echo "Error: Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"
