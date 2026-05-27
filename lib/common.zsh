@@ -2,53 +2,50 @@
 set -euo pipefail
 
 notion_usage() {
-  cat <<'USAGE'
-Usage: ns <command> [options]
-
-Commands:
-  init       Initialize notion project config
-  link       Map a first-level subdirectory to a Notion relation page id
-  status     Show resolved sync intent for a markdown file
-  completion Print shell completion script
-  upload     Upload a markdown file to Notion
-  download   Download a markdown file from Notion
-  help       Show this help
-USAGE
-
+  notion_print_usage "Usage: ns <command> [options]"
+  notion_print_usage ""
+  notion_print_usage "Commands:"
+  notion_print_usage "  init       Initialize notion project config"
+  notion_print_usage "  link       Map a first-level subdirectory to a Notion relation page id"
+  notion_print_usage "  status     Show resolved sync intent for a markdown file"
+  notion_print_usage "  completion Print shell completion script"
+  notion_print_usage "  upload     Upload a markdown file to Notion"
+  notion_print_usage "  download   Download a markdown file from Notion"
+  notion_print_usage "  help       Show this help"
 }
 
 # Prints init command usage.
 # Example: notion_init_usage
 notion_init_usage() {
-  echo "Usage: ns init --database-id <id> --notes-root <path> [--force]"
+  notion_print_usage "Usage: ns init --database-id <id> --notes-root <path> [--force]"
 }
 
 # Prints link command usage.
 # Example: notion_link_usage
 notion_link_usage() {
-  echo "Usage: ns link <subdir> <relation_page_id> <relation_property> [--force]"
+  notion_print_usage "Usage: ns link <subdir> <relation_page_id> <relation_property> [--force]"
 }
 
 # Prints upload command usage.
 # Example: notion_upload_usage
 notion_upload_usage() {
-  echo "Usage: ns upload [--dry-run] <file.md>"
+  notion_print_usage "Usage: ns upload [--dry-run] <file.md>"
 }
 
 # Prints download command usage.
 # Example: notion_download_usage
 notion_download_usage() {
-  echo "Usage: ns download [--dry-run] <file.md>"
+  notion_print_usage "Usage: ns download [--dry-run] <file.md>"
 }
 
 # Prints status command usage.
 # Example: notion_status_usage
 notion_status_usage() {
-  echo "Usage: ns status <file.md>"
+  notion_print_usage "Usage: ns status <file.md>"
 }
 
 notion_completion_usage() {
-  echo "Usage: ns completion zsh"
+  notion_print_usage "Usage: ns completion zsh"
 }
 
 notion_is_tty() {
@@ -61,6 +58,28 @@ notion_color() {
     printf '\033[%sm' "$code"
   fi
 }
+
+notion_print() {
+  local color="$1"
+  local label="$2"
+  shift 2
+  local msg="$*"
+  local reset=""
+  if notion_is_tty; then
+    reset=$'\033[0m'
+  fi
+  if [[ -n "$label" ]]; then
+    printf "%s%s%s %s\n" "$color" "$label" "$reset" "$msg"
+  else
+    printf "%s%s%s\n" "$color" "$msg" "$reset"
+  fi
+}
+
+notion_print_error() { notion_print $'\033[1;31m' "Error:" "$*" >&2; }
+notion_print_warn() { notion_print $'\033[1;33m' "Warning:" "$*"; }
+notion_print_info() { notion_print $'\033[1;36m' "" "$*"; }
+notion_print_success() { notion_print $'\033[1;32m' "" "$*"; }
+notion_print_usage() { notion_print $'\033[1;35m' "" "$*"; }
 
 # Returns default local secrets file path.
 # Example: notion_default_secrets_path
@@ -111,7 +130,7 @@ notion_load_token() {
 notion_require_token() {
   local res
   if ! res="$(notion_load_token)"; then
-    echo "Error: Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)" >&2
+    notion_print_error "Set NOTION_TOKEN in environment, OR add export NOTION_TOKEN=... to $(notion_default_secrets_path)"
     return 1
   fi
 

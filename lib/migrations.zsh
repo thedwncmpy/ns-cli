@@ -18,8 +18,8 @@ notion_config_migrate_in_place() {
     return 0
   fi
 
-  echo "Error: Unsupported config version '$version' in $config_path" >&2
-  echo "Run a newer notion-cli version that supports this migration path." >&2
+  notion_print_error "Unsupported config version '$version' in $config_path"
+  notion_print_error "Run a newer notion-cli version that supports this migration path."
   return 1
 }
 

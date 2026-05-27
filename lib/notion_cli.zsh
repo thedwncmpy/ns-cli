@@ -22,7 +22,7 @@ notion_cmd_init() {
       ;;
     --database-id)
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        echo "Error: --database-id requires a value"
+        notion_print_error "--database-id requires a value"
         return 1
       fi
       database_id="$2"
@@ -30,7 +30,7 @@ notion_cmd_init() {
       ;;
     --notes-root)
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        echo "Error: --notes-root requires a value"
+        notion_print_error "--notes-root requires a value"
         return 1
       fi
       notes_root="$2"
@@ -41,7 +41,7 @@ notion_cmd_init() {
       shift
       ;;
     *)
-      echo "Error: unknown argument for init: $1"
+      notion_print_error "unknown argument for init: $1"
       notion_init_usage
       return 1
       ;;
@@ -49,13 +49,13 @@ notion_cmd_init() {
   done
 
   if [[ -z "$database_id" ]]; then
-    echo "Error: --database-id is required"
+    notion_print_error "--database-id is required"
     notion_init_usage
     return 1
   fi
 
   if [[ -z "$notes_root" ]]; then
-    echo "Error: --notes-root is required"
+    notion_print_error "--notes-root is required"
     notion_init_usage
     return 1
   fi
@@ -80,7 +80,7 @@ notion_cmd_link() {
       shift
       ;;
     -*)
-      echo "Error: unknown argument for link: $1"
+      notion_print_error "unknown argument for link: $1"
       notion_link_usage
       return 1
       ;;
@@ -92,7 +92,7 @@ notion_cmd_link() {
       elif [[ -z "$relation_property" ]]; then
         relation_property="$1"
       else
-        echo "Error: too many arguments for link"
+        notion_print_error "too many arguments for link"
         notion_link_usage
         return 1
       fi
@@ -102,14 +102,14 @@ notion_cmd_link() {
   done
 
   if [[ -z "$subdir" || -z "$relation_page_id" || -z "$relation_property" ]]; then
-    echo "Error: <subdir> <relation_page_id> <relation_property> are required"
+    notion_print_error "<subdir> <relation_page_id> <relation_property> are required"
     notion_link_usage
     return 1
   fi
 
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'ns init' first."
+    notion_print_error "No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -117,7 +117,7 @@ notion_cmd_link() {
   notes_root="$(notion_config_get_notes_root "$config_path")"
 
   if [[ ! -d "$notes_root/$subdir" ]]; then
-    echo "Error: directory does not exist: $notes_root/$subdir"
+    notion_print_error "directory does not exist: $notes_root/$subdir"
     return 1
   fi
 
@@ -125,7 +125,7 @@ notion_cmd_link() {
   existing_mapping="$(notion_config_get_mapping_relation_page_id "$config_path" "$subdir")"
 
   if [[ -n "$existing_mapping" && $force -ne 1 ]]; then
-    echo "Error: '$subdir' is already mapped to '$existing_mapping' (use --force to overwrite)"
+    notion_print_error "'$subdir' is already mapped to '$existing_mapping' (use --force to overwrite)"
     return 1
   fi
 
@@ -140,7 +140,7 @@ notion_cmd_link() {
     '.mappings[$subdir] = { relation_page_id: $relation, relation_property: $property }' "$config_path" >"$tmp_cfg"
   mv "$tmp_cfg" "$config_path"
 
-  echo "Linked '$subdir' to '$relation_page_id' using property '$relation_property' in $config_path"
+  notion_print_success "Linked '$subdir' to '$relation_page_id' using property '$relation_property' in $config_path"
 }
 
 notion_cmd_upload() {
@@ -159,7 +159,7 @@ notion_cmd_upload() {
   # 1) Validate required <file.md> argument.
   local file="${1:-}"
   if [[ -z "$file" ]]; then
-    echo "Error: upload requires <file.md>"
+    notion_print_error "upload requires <file.md>"
     notion_upload_usage
     return 1
   fi
@@ -167,19 +167,19 @@ notion_cmd_upload() {
   # 2) Validate file exists and has .md extension.
   local abs_file="${file:A}"
   if [[ ! -f "$abs_file" ]]; then
-    echo "Error: file not found: $file"
+    notion_print_error "file not found: $file"
     return 1
   fi
 
   if [[ "$abs_file" != *.md ]]; then
-    echo "Error: upload only supports .md files"
+    notion_print_error "upload only supports .md files"
     return 1
   fi
 
   # 3) Locate config via find_config; read notes_root + mappings.
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'ns init' first."
+    notion_print_error "No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -188,14 +188,14 @@ notion_cmd_upload() {
   notes_root="$(notion_config_get_notes_root "$config_path")"
   local abs_notes_root="${notes_root:A}"
   if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
-    echo "Error: file must be inside notes_root: $abs_notes_root"
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   fi
 
   # 5) Resolve first-level segment and require mapping.
   local relative_path first_segment
   relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
-    echo "Error: file must be inside notes_root: $abs_notes_root"
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   }
   first_segment="${relative_path%%/*}"
@@ -204,14 +204,14 @@ notion_cmd_upload() {
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
   if [[ -z "$relation_page_id" ]]; then
-    echo "Error: no mapping found for first-level directory '$first_segment'"
+    notion_print_error "no mapping found for first-level directory '$first_segment'"
     return 1
   fi
 
   local title
   title="$(basename "$abs_file" .md)"
   if [[ "$dry_run" -eq 1 ]]; then
-    echo "Dry-run upload intent:"
+    notion_print_info "Dry-run upload intent:"
     echo "  file: $abs_file"
     echo "  title: $title"
     echo "  notes_root: $abs_notes_root"
@@ -234,7 +234,7 @@ notion_cmd_upload() {
   database_id="$(notion_config_get_database_id "$config_path")"
 
   if [[ -z "$database_id" ]]; then
-    echo "Error: database_id missing in config. Re-run ns init."
+    notion_print_error "database_id missing in config. Re-run ns init."
     return 1
   fi
 
@@ -242,8 +242,8 @@ notion_cmd_upload() {
   local parser_path
   parser_path="$(notion_parser_path)"
   if [[ ! -f "$parser_path" ]]; then
-    echo "Error: notion parser not found at $parser_path"
-    echo "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
+    notion_print_error "notion parser not found at $parser_path"
+    notion_print_error "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
     return 1
   fi
 
@@ -251,12 +251,12 @@ notion_cmd_upload() {
   tmp_blocks="$(mktemp)"
   if ! python3 "$parser_path" "$abs_file" > "$tmp_blocks"; then
     rm -f "$tmp_blocks"
-    echo "Error: failed to parse markdown with $parser_path"
+    notion_print_error "failed to parse markdown with $parser_path"
     return 1
   fi
   if ! jq -e . "$tmp_blocks" >/dev/null 2>&1; then
     rm -f "$tmp_blocks"
-    echo "Error: parser produced invalid JSON for '$abs_file'"
+    notion_print_error "parser produced invalid JSON for '$abs_file'"
     return 1
   fi
 
@@ -273,7 +273,7 @@ notion_cmd_upload() {
   search_response="$(notion_query_all "$database_id" "$notion_token" "$filter")" || return 1
 
   if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
+    notion_print_error "Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
     return 1
   fi
 
@@ -281,8 +281,8 @@ notion_cmd_upload() {
   local match_count
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
   if [[ "$match_count" -gt 1 ]]; then
-    echo "Error: ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
-    echo "Refine remote data so only one exact title+relation page exists."
+    notion_print_error "ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
+    notion_print_warn "Refine remote data so only one exact title+relation page exists."
     return 1
   fi
 
@@ -310,7 +310,7 @@ notion_cmd_upload() {
       response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
       if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
         rm -f "$tmp_blocks"
-        echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+        notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
         return 1
       fi
       start=$((start + 100))
@@ -342,14 +342,14 @@ notion_cmd_upload() {
 
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
       rm -f "$tmp_blocks"
-      echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+      notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
       return 1
     fi
 
     page_id="$(printf '%s' "$response" | jq -r '.id // empty')"
     if [[ -z "$page_id" ]]; then
       rm -f "$tmp_blocks"
-      echo "Error: Notion sync failed: create response missing page id."
+      notion_print_error "Notion sync failed: create response missing page id."
       return 1
     fi
 
@@ -362,7 +362,7 @@ notion_cmd_upload() {
       response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
       if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
         rm -f "$tmp_blocks"
-        echo "Error: Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
+        notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
         return 1
       fi
       start=$((start + 100))
@@ -371,7 +371,7 @@ notion_cmd_upload() {
 
   rm -f "$tmp_blocks"
 
-  echo "Uploaded '$title' successfully."
+  notion_print_success "Uploaded '$title' successfully."
   return 0
 }
 
@@ -390,13 +390,13 @@ notion_cmd_download() {
   local target="${1:-}"
 
   if [[ -z "$target" ]]; then
-    echo "Error: download requires <file.md>"
+    notion_print_error "download requires <file.md>"
     notion_download_usage
     return 1
   fi
 
   if [[ "$target" != *.md ]]; then
-    echo "Error: download requires a <*.md>"
+    notion_print_error "download requires a <*.md>"
     notion_download_usage
     return 1
   fi
@@ -413,7 +413,7 @@ notion_cmd_download() {
 
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'ns init' first."
+    notion_print_error "No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -422,13 +422,13 @@ notion_cmd_download() {
   notes_root="$(notion_config_get_notes_root "$config_path")"
   local abs_notes_root="${notes_root:A}"
   if ! notion_ensure_path_inside_notes_root "$abs_target" "$abs_notes_root"; then
-    echo "Error: file must be inside notes_root: $abs_notes_root"
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   fi
 
   local relative_path
   relative_path="$(notion_relative_path_under_notes_root "$abs_target" "$abs_notes_root")" || {
-    echo "Error: file must be inside notes_root: $abs_notes_root"
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   }
   local first_seg="${relative_path%%/*}"
@@ -438,12 +438,12 @@ notion_cmd_download() {
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_seg")"
 
   if [[ -z "$relation_page_id" ]]; then
-    echo "Error: no mapping found for first-level directory '$first_seg'"
+    notion_print_error "no mapping found for first-level directory '$first_seg'"
     return 1
   fi
 
   if [[ "$dry_run" -eq 1 ]]; then
-    echo "Dry-run download intent:"
+    notion_print_info "Dry-run download intent:"
     echo "  file: $abs_target"
     echo "  title: $abs_target_name"
     echo "  notes_root: $abs_notes_root"
@@ -461,7 +461,7 @@ notion_cmd_download() {
   database_id="$(notion_config_get_database_id "$config_path")"
 
   if [[ -z "$database_id" ]]; then
-    echo "Error: database_id missing in config. Re-run ns init."
+    notion_print_error "database_id missing in config. Re-run ns init."
     return 1
   fi
 
@@ -478,7 +478,7 @@ notion_cmd_download() {
   search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
 
   if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
+    notion_print_error "Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
     return 1
   fi
 
@@ -486,19 +486,19 @@ notion_cmd_download() {
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
 
   if [[ "$match_count" -eq 0 ]]; then
-    echo "Error: no remote page found for '$abs_target_name' in relation '$first_seg'"
+    notion_print_error "no remote page found for '$abs_target_name' in relation '$first_seg'"
     return 1
   fi
 
   if [[ "$match_count" -gt 1 ]]; then
-    echo "Error: ambiguous match for title '$abs_target_name' in relation '$first_seg' ($match_count pages)."
-    echo "Refine remote data so only one exact title+relation page exists."
+    notion_print_error "ambiguous match for title '$abs_target_name' in relation '$first_seg' ($match_count pages)."
+    notion_print_warn "Refine remote data so only one exact title+relation page exists."
     return 1
   fi
 
   page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
   if [[ -z "$page_id" ]]; then
-    echo "Error: failed to resolve remote page id."
+    notion_print_error "failed to resolve remote page id."
     return 1
   fi
 
@@ -506,7 +506,7 @@ notion_cmd_download() {
   blocks_response="$(notion_fetch_all_children_blocks "$page_id" "$notion_token")" || return 1
 
   if printf '%s' "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
-    echo "Error: Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"
+    notion_print_error "Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"
     return 1
   fi
 
@@ -514,19 +514,19 @@ notion_cmd_download() {
   parser_path="$(notion_parser_path)"
 
   if [[ ! -f "$parser_path" ]]; then
-    echo "Error: notion parser not found at $parser_path"
-    echo "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
+    notion_print_error "notion parser not found at $parser_path"
+    notion_print_error "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
     return 1
   fi
 
   if ! md_content="$(printf '%s' "$blocks_response" | jq '.results' | python3 "$parser_path" --reverse)"; then
-    echo "Error: failed to convert notion blocks to markdown with $parser_path"
+    notion_print_error "failed to convert notion blocks to markdown with $parser_path"
     return 1
   fi
 
   mkdir -p "$abs_target_path"
   printf "%s\n" "$md_content" >"$abs_target"
-  echo "Downloaded '$abs_target_name' to $abs_target"
+  notion_print_success "Downloaded '$abs_target_name' to $abs_target"
   return 0
 }
 
@@ -561,7 +561,7 @@ notion_main() {
     notion_cmd_download "$@"
     ;;
   *)
-    echo "Unknown command: $cmd"
+    notion_print_error "Unknown command: $cmd"
     echo
     notion_usage
     return 1
@@ -577,12 +577,12 @@ notion_cmd_status() {
 
   local file="${1:-}"
   if [[ -z "$file" ]]; then
-    echo "Error: status requires <file.md>"
+    notion_print_error "status requires <file.md>"
     notion_status_usage
     return 1
   fi
   if [[ "$file" != *.md ]]; then
-    echo "Error: status requires a <*.md>"
+    notion_print_error "status requires a <*.md>"
     notion_status_usage
     return 1
   fi
@@ -591,7 +591,7 @@ notion_cmd_status() {
   local title="${abs_file:t:r}"
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
-    echo "Error: No project config found. Run 'ns init' first."
+    notion_print_error "No project config found. Run 'ns init' first."
     return 1
   }
 
@@ -599,13 +599,13 @@ notion_cmd_status() {
   notes_root="$(notion_config_get_notes_root "$config_path")"
   abs_notes_root="${notes_root:A}"
   if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
-    echo "Error: file must be inside notes_root: $abs_notes_root"
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   fi
 
   local relative_path first_segment
   relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
-    echo "Error: file must be inside notes_root: $abs_notes_root"
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   }
   first_segment="${relative_path%%/*}"
@@ -615,7 +615,7 @@ notion_cmd_status() {
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
   if [[ -z "$relation_page_id" ]]; then
-    echo "Error: no mapping found for first-level directory '$first_segment'"
+    notion_print_error "no mapping found for first-level directory '$first_segment'"
     return 1
   fi
 
@@ -658,7 +658,7 @@ notion_cmd_completion() {
     return 0
   fi
   if [[ "${1:-}" != "zsh" ]]; then
-    echo "Error: completion requires shell target (supported: zsh)"
+    notion_print_error "completion requires shell target (supported: zsh)"
     notion_completion_usage
     return 1
   fi

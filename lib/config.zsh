@@ -34,14 +34,14 @@ notion_init_config() {
   local cfg_path="$cfg_dir/config.json"
 
   if [[ -f "$cfg_path" && "$force" -ne 1 ]]; then
-    echo "Error: config already exists at $cfg_path (use --force to overwrite)"
+    notion_print_error "config already exists at $cfg_path (use --force to overwrite)"
     return 1
   fi
 
   mkdir -p "$cfg_dir"
   notion_write_config "$cfg_path" "$database_id" "$abs_notes_root"
 
-  echo "Initialized config at $cfg_path"
+  notion_print_success "Initialized config at $cfg_path"
 }
 
 # Finds .notion-cli/config.json by walking up from current directory.
