@@ -50,7 +50,7 @@ assert_contains "$out" "Usage: notion upload"
 
 # Missing file path should fail
 set +e
-out="$((cd "$notes_root" && $CLI upload) 2>&1)"
+out="$( (cd "$notes_root" && $CLI upload) 2>&1 )"
 code=$?
 set -e
 if [[ "$out" == *"not implemented"* ]]; then
@@ -61,7 +61,7 @@ assert_contains "$out" "<file.md>"
 
 # Nonexistent file should fail
 set +e
-out="$((cd "$notes_root" && $CLI upload "$notes_root/project/missing.md") 2>&1)"
+out="$( (cd "$notes_root" && $CLI upload "$notes_root/project/missing.md") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1
@@ -70,7 +70,7 @@ assert_contains "$out" "not found"
 # Non-md extension should fail
 printf 'hello\n' > "$notes_root/project/note.txt"
 set +e
-out="$((cd "$notes_root" && $CLI upload "$notes_root/project/note.txt") 2>&1)"
+out="$( (cd "$notes_root" && $CLI upload "$notes_root/project/note.txt") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1
@@ -80,7 +80,7 @@ assert_contains "$out" ".md"
 mkdir -p "$tmp_dir/outside"
 printf 'hello\n' > "$tmp_dir/outside/file.md"
 set +e
-out="$((cd "$notes_root" && $CLI upload "$tmp_dir/outside/file.md") 2>&1)"
+out="$( (cd "$notes_root" && $CLI upload "$tmp_dir/outside/file.md") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1
@@ -91,7 +91,7 @@ assert_contains "$out" "notes_root"
 mkdir -p "$notes_root/unmapped"
 printf 'hello\n' > "$notes_root/unmapped/note.md"
 set +e
-out="$((cd "$notes_root" && $CLI upload "$notes_root/unmapped/note.md") 2>&1)"
+out="$( (cd "$notes_root" && $CLI upload "$notes_root/unmapped/note.md") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1

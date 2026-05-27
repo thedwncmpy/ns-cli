@@ -48,7 +48,7 @@ assert_contains "$out" "Usage: notion download"
 
 # Missing file path should fail
 set +e
-out="$((cd "$notes_root" && $CLI download) 2>&1)"
+out="$( (cd "$notes_root" && $CLI download) 2>&1 )"
 code=$?
 set -e
 if [[ "$out" == *"not implemented"* ]]; then
@@ -60,7 +60,7 @@ assert_contains "$out" "<file.md>"
 # Non-md extension should fail
 printf 'x\n' > "$notes_root/project/bad.txt"
 set +e
-out="$((cd "$notes_root" && $CLI download "$notes_root/project/bad.txt") 2>&1)"
+out="$( (cd "$notes_root" && $CLI download "$notes_root/project/bad.txt") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1
@@ -70,7 +70,7 @@ assert_contains "$out" ".md"
 mkdir -p "$tmp_dir/outside"
 printf 'x\n' > "$tmp_dir/outside/remote.md"
 set +e
-out="$((cd "$notes_root" && $CLI download "$tmp_dir/outside/remote.md") 2>&1)"
+out="$( (cd "$notes_root" && $CLI download "$tmp_dir/outside/remote.md") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1
@@ -80,7 +80,7 @@ assert_contains "$out" "notes_root"
 # Unmapped first-level directory should fail
 mkdir -p "$notes_root/unmapped"
 set +e
-out="$((cd "$notes_root" && $CLI download "$notes_root/unmapped/file.md") 2>&1)"
+out="$( (cd "$notes_root" && $CLI download "$notes_root/unmapped/file.md") 2>&1 )"
 code=$?
 set -e
 assert_exit_code "$code" 1
