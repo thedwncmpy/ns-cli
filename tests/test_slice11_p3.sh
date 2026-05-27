@@ -41,11 +41,11 @@ out="$(cd "$notes_root" && "$CLI" status "project/p3.md" 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$out" "Status:"
-assert_contains "$out" "mapping_dir: project"
-assert_contains "$out" "relation_page_id: rel_123"
-assert_contains "$out" "relation_property: notebook"
-assert_contains "$out" "query_filter_json:"
+assert_contains "$out" "Status"
+assert_contains "$out" "Mapping Dir: project"
+assert_contains "$out" "Relation Page: rel_123"
+assert_contains "$out" "Relation Prop: notebook"
+assert_contains "$out" "Query Filter:"
 
 set +e
 out="$(cd "$notes_root" && NOTION_TOKEN='' "$CLI" --help 2>&1)"

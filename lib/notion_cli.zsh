@@ -551,6 +551,9 @@ notion_main() {
   status)
     notion_cmd_status "$@"
     ;;
+  completion)
+    notion_cmd_completion "$@"
+    ;;
   upload)
     notion_cmd_upload "$@"
     ;;
@@ -626,17 +629,79 @@ notion_cmd_status() {
     }
   }')"
 
-  echo "Status:"
-  echo "  file: $abs_file"
-  echo "  title: $title"
-  echo "  config: $config_path"
-  echo "  database_id: $database_id"
-  echo "  notes_root: $abs_notes_root"
-  echo "  relative_path: $relative_path"
-  echo "  mapping_dir: $first_segment"
-  echo "  relation_page_id: $relation_page_id"
-  echo "  relation_property: $relation_property"
-  echo "  upload_intent: query exact title+relation; update if found else create"
-  echo "  download_intent: query exact title+relation; overwrite local file if single match"
-  echo "  query_filter_json: $query_payload"
+  local c_head c_key c_val c_reset
+  c_head="$(notion_color '1;36')"
+  c_key="$(notion_color '1;33')"
+  c_val="$(notion_color '0;37')"
+  c_reset="$(notion_color '0')"
+
+  echo "${c_head}Status${c_reset}"
+  echo "${c_key}  File${c_reset}: ${c_val}$abs_file${c_reset}"
+  echo "${c_key}  Title${c_reset}: ${c_val}$title${c_reset}"
+  echo "${c_key}  Config${c_reset}: ${c_val}$config_path${c_reset}"
+  echo "${c_key}  Database${c_reset}: ${c_val}$database_id${c_reset}"
+  echo "${c_key}  Notes Root${c_reset}: ${c_val}$abs_notes_root${c_reset}"
+  echo "${c_key}  Relative Path${c_reset}: ${c_val}$relative_path${c_reset}"
+  echo "${c_key}  Mapping Dir${c_reset}: ${c_val}$first_segment${c_reset}"
+  echo "${c_key}  Relation Page${c_reset}: ${c_val}$relation_page_id${c_reset}"
+  echo "${c_key}  Relation Prop${c_reset}: ${c_val}$relation_property${c_reset}"
+  echo "${c_key}  Upload Intent${c_reset}: ${c_val}query exact title+relation; update if found else create${c_reset}"
+  echo "${c_key}  Download Intent${c_reset}: ${c_val}query exact title+relation; overwrite local file if single match${c_reset}"
+  echo "${c_key}  Query Filter${c_reset}: ${c_val}$query_payload${c_reset}"
+}
+
+notion_cmd_completion() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_completion_usage
+    return 0
+  fi
+  if [[ "${1:-}" != "zsh" ]]; then
+    echo "Error: completion requires shell target (supported: zsh)"
+    notion_completion_usage
+    return 1
+  fi
+
+  cat <<'EOF'
+#compdef ns
+
+_ns() {
+  local context state line
+  typeset -A opt_args
+
+  _arguments -C \
+    '1:command:->cmds' \
+    '*::arg:->args'
+
+  case $state in
+    cmds)
+      _values 'ns commands' \
+        'help[Show help]' \
+        'init[Initialize config]' \
+        'link[Map directory to relation]' \
+        'status[Show resolved sync intent]' \
+        'upload[Upload markdown file]' \
+        'download[Download markdown file]' \
+        'completion[Print completion script]'
+      ;;
+    args)
+      case $line[1] in
+        init)
+          _arguments '--database-id[Notion database id]:database id:' '--notes-root[Notes root path]:notes root:_files -/' '--force[Overwrite existing config]'
+          ;;
+        link)
+          _arguments '1:subdir:_files -/' '2:relation page id:' '3:relation property:' '--force[Overwrite existing mapping]'
+          ;;
+        status|upload|download)
+          _arguments '1:markdown file:_files -g "*.md"'
+          ;;
+        completion)
+          _values 'shell' zsh
+          ;;
+      esac
+      ;;
+  esac
+}
+
+compdef _ns ns
+EOF
 }

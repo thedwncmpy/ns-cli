@@ -9,6 +9,7 @@ Commands:
   init       Initialize notion project config
   link       Map a first-level subdirectory to a Notion relation page id
   status     Show resolved sync intent for a markdown file
+  completion Print shell completion script
   upload     Upload a markdown file to Notion
   download   Download a markdown file from Notion
   help       Show this help
@@ -44,6 +45,21 @@ notion_download_usage() {
 # Example: notion_status_usage
 notion_status_usage() {
   echo "Usage: ns status <file.md>"
+}
+
+notion_completion_usage() {
+  echo "Usage: ns completion zsh"
+}
+
+notion_is_tty() {
+  [[ -t 1 ]]
+}
+
+notion_color() {
+  local code="$1"
+  if notion_is_tty; then
+    printf '\033[%sm' "$code"
+  fi
 }
 
 # Returns default local secrets file path.

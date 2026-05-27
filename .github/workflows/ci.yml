@@ -41,3 +41,4 @@ jobs:
           ./tests/test_slice8_homebrew.sh
           ./tests/test_slice10_reliability.sh
           ./tests/test_slice11_p3.sh
+          ./tests/test_slice12_status_completion.sh

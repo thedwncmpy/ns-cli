@@ -33,6 +33,7 @@ ns init --database-id <id> --notes-root <path> [--force]
 ns link <subdir> <relation_page_id> <relation_property> [--force]
 ns upload <file.md>
 ns download <file.md>
+ns completion zsh
 ```
 
 ## Quick Start
@@ -103,3 +104,12 @@ In legacy mode, relation property defaults to `notebook`.
 - Exact title + mapped relation query only
 - Ambiguous matches fail hard
 
+
+
+## Shell Completion
+
+For zsh, load completion in your shell startup:
+
+```bash
+eval "$(ns completion zsh)"
+```
