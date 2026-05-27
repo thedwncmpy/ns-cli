@@ -9,6 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout homebrew formula repo
+        uses: actions/checkout@v4
+        with:
+          repository: thedwncmpy/homebrew-notion-cli
+          path: homebrew-notion-cli
+      - name: Link formula repo at expected sibling path
+        run: ln -s "$GITHUB_WORKSPACE/homebrew-notion-cli" "$GITHUB_WORKSPACE/../homebrew-notion-cli"
       - name: Install dependencies
         run: |
           sudo apt-get update
