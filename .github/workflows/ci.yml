@@ -5,6 +5,12 @@ on:
   pull_request:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to bump in tap (example: v0.1.9)"
+        required: false
+        type: string
 
 jobs:
   test:
@@ -46,7 +52,7 @@ jobs:
           ./tests/test_slice12_status_completion.sh
 
   bump-homebrew-tap:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source repo
@@ -61,10 +67,14 @@ jobs:
 
       - name: Update formula url/version/sha256
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.release.tag_name }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [[ -z "${TAG}" ]]; then
+            echo "Error: TAG is required. Provide workflow_dispatch input 'release_tag' (example: v0.1.9)."
+            exit 1
+          fi
           FORMULA="homebrew-notion-cli/Formula/ns.rb"
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
           SHA="$(curl -fsSL "$TARBALL_URL" | sha256sum | awk '{print $1}')"
