@@ -747,6 +747,6 @@ compdef _ns ns
 EOF
 }
 
-if [[ "${(%):-%N}" == "$0" ]]; then
+if [[ "${ZSH_EVAL_CONTEXT:-}" == "toplevel" ]]; then
   notion_main "$@"
 fi
