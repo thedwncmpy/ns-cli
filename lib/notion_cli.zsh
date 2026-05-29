@@ -542,6 +542,9 @@ notion_main() {
   help | -h | --help)
     notion_usage
     ;;
+  version | -v | --version)
+    notion_cmd_version "$@"
+    ;;
   init)
     notion_cmd_init "$@"
     ;;
@@ -677,7 +680,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "help init link status upload download completion" -- "$cur") )
+    COMPREPLY=( $(compgen -W "help init link status upload download completion version" -- "$cur") )
     return 0
   fi
 
@@ -726,7 +729,8 @@ _ns() {
         'status[Show resolved sync intent]' \
         'upload[Upload markdown file]' \
         'download[Download markdown file]' \
-        'completion[Print completion script]'
+        'completion[Print completion script]' \
+        'version[Show ns version]'
       ;;
     args)
       case $line[1] in
@@ -749,6 +753,19 @@ _ns() {
 
 compdef _ns ns
 EOF
+}
+
+notion_cmd_version() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_version_usage
+    return 0
+  fi
+  if [[ $# -gt 0 ]]; then
+    notion_print_error "version does not accept arguments"
+    notion_version_usage
+    return 1
+  fi
+  echo "ns ${NOTION_CLI_VERSION}"
 }
 
 if [[ "${ZSH_EVAL_CONTEXT:-}" == "toplevel" ]]; then

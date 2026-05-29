@@ -1,5 +1,6 @@
 #!/usr/bin/env zsh
 set -euo pipefail
+NOTION_CLI_VERSION="${NOTION_CLI_VERSION:-0.1.12}"
 
 notion_usage() {
   notion_print_usage "Usage: ns <command> [options]"
@@ -9,9 +10,14 @@ notion_usage() {
   notion_print_usage "  link       Map a first-level subdirectory to a Notion relation page id"
   notion_print_usage "  status     Show resolved sync intent for a markdown file"
   notion_print_usage "  completion Print shell completion script"
+  notion_print_usage "  version    Show ns version"
   notion_print_usage "  upload     Upload a markdown file to Notion"
   notion_print_usage "  download   Download a markdown file from Notion"
   notion_print_usage "  help       Show this help"
+}
+
+notion_version_usage() {
+  notion_print_usage "Usage: ns version"
 }
 
 # Prints init command usage.
