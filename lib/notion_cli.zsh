@@ -577,9 +577,13 @@ notion_cmd_status() {
 
   local file="${1:-}"
   if [[ -z "$file" ]]; then
-    notion_print_error "status requires <file.md>"
-    notion_status_usage
-    return 1
+    local config_path
+    config_path="$(notion_find_and_prepare_config)" || {
+      notion_print_error "No project config found. Run 'ns init' first."
+      return 1
+    }
+    cat "$config_path"
+    return 0
   fi
   if [[ "$file" != *.md ]]; then
     notion_print_error "status requires a <*.md>"
