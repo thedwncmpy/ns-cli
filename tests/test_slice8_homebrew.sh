@@ -23,7 +23,9 @@ assert_contains() {
 
 formula_text="$(cat "$FORMULA")"
 assert_contains "$formula_text" "class Ns < Formula"
-assert_contains "$formula_text" "bin.install \"bin/ns\""
+if [[ "$formula_text" != *"bin.install \"bin/ns\""* && "$formula_text" != *"bin.install rewritten => \"ns\""* ]]; then
+  fail "expected formula to install ns binary (bin.install \"bin/ns\" or rewritten launcher)"
+fi
 assert_contains "$formula_text" "def caveats"
 assert_contains "$formula_text" "eval \"\$(ns completion zsh)\""
 assert_contains "$formula_text" "eval \"\$(ns completion bash)\""
