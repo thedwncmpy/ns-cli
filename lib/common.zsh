@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 set -euo pipefail
-NOTION_CLI_VERSION="${NOTION_CLI_VERSION:-0.1.12}"
+NOTION_CLI_VERSION="${NOTION_CLI_VERSION:-__NS_VERSION__}"
 
 notion_usage() {
   notion_print_usage "Usage: ns <command> [options]"
