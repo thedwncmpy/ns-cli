@@ -47,10 +47,10 @@ cat > "$bin_dir/python3" <<'PYEOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${2:-}" == "--reverse" ]]; then
-  cat >/dev/null
+  [[ -t 0 ]] || cat >/dev/null
   printf "# title\\nroundtrip-body"
 else
-  cat >/dev/null
+  [[ -t 0 ]] || cat >/dev/null
   printf '[{"object":"block","type":"paragraph","paragraph":{"rich_text":[{"type":"text","text":{"content":"roundtrip-body"}}]}}]'
 fi
 PYEOF
