@@ -19,7 +19,8 @@ The parser reads your Markdown file line-by-line to identify the "type" of conte
 - **Headers**: Lines starting with `#`, `##`, or `###` become `heading_1`, `heading_2`, or `heading_3`.
 - **Lists**: Lines starting with `-` or `*` become `bulleted_list_item`.
 - **Checklists**: Lines like `- [ ]` or `- [x]` become `to_do` blocks.
-- **Callouts**: Lines starting with `> ` are turned into callout blocks. We even support icons like ⚠️, 🚨, and ✅ using "Alert" syntax (e.g., `> [!WARNING]`).
+- **Quotes**: Consecutive lines starting with `> ` are grouped into a single multiline `quote` block.
+- **Callouts**: Alert syntax like `> [!WARNING]` starts a `callout` block, and following `> ` lines are included in the same multiline callout.
 - **Paragraphs**: Anything else is treated as a standard paragraph.
 
 ### 2. Inline Text (The "Rich Text" Layer)
@@ -69,7 +70,8 @@ graph TD
 | `# Title` | `heading_1` | Supports up to level 3 |
 | `- Item` | `bulleted_list_item` | |
 | `- [x] Done` | `to_do` | `checked: true` |
-| `> [!INFO] Hi` | `callout` | Uses ℹ️ icon |
+| `> quoted line` | `quote` | Consecutive quoted lines are grouped |
+| `> [!INFO] Hi` | `callout` | Uses ℹ️ icon and supports `> ` continuation lines |
 | `[TOC]` | `table_of_contents` | Special placeholder |
 
 ## Command Usage

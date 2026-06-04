@@ -109,10 +109,41 @@ def md_to_notion_blocks(md_text):
     in_code_block = False
     code_lang = "plain text"
     code_lines = []
+    quote_lines = []
+    callout_lines = []
+    callout_icon = None
+
+    def flush_quote_lines():
+        nonlocal quote_lines
+        if not quote_lines:
+            return
+        blocks.append({
+            "object": "block",
+            "type": "quote",
+            "quote": {"rich_text": parse_inline_text("\n".join(quote_lines))}
+        })
+        quote_lines = []
+
+    def flush_callout_lines():
+        nonlocal callout_lines, callout_icon
+        if not callout_lines:
+            return
+        blocks.append({
+            "object": "block",
+            "type": "callout",
+            "callout": {
+                "rich_text": parse_inline_text("\n".join(callout_lines)),
+                "icon": {"emoji": callout_icon or "💡"}
+            }
+        })
+        callout_lines = []
+        callout_icon = None
     
     for line in lines:
         if in_code_block:
             if line.strip().startswith("```"):
+                flush_quote_lines()
+                flush_callout_lines()
                 blocks.append({
                     "object": "block",
                     "type": "code",
@@ -130,18 +161,25 @@ def md_to_notion_blocks(md_text):
 
         stripped = line.strip()
         if stripped.startswith("```"):
+            flush_quote_lines()
+            flush_callout_lines()
             in_code_block = True
             lang = stripped[3:].strip()
             code_lang = normalize_code_language(lang)
             code_lines = []
             continue
 
-        line = stripped
-        if not line:
+        if not stripped:
+            flush_quote_lines()
+            flush_callout_lines()
             continue
+            
+        line = stripped
             
         # Table of Contents placeholder
         if line == "[TOC]":
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "table_of_contents",
@@ -151,18 +189,24 @@ def md_to_notion_blocks(md_text):
 
         # Headers
         if line.startswith("# "):
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "heading_1",
                 "heading_1": {"rich_text": parse_inline_text(line[2:])}
             })
         elif line.startswith("## "):
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "heading_2",
                 "heading_2": {"rich_text": parse_inline_text(line[3:])}
             })
         elif line.startswith("### "):
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "heading_3",
@@ -171,12 +215,16 @@ def md_to_notion_blocks(md_text):
             
         # Checklists
         elif line.startswith("- [ ] "):
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "to_do",
                 "to_do": {"rich_text": parse_inline_text(line[6:]), "checked": False}
             })
         elif line.startswith("- [x] ") or line.startswith("- [X] "):
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "to_do",
@@ -185,41 +233,48 @@ def md_to_notion_blocks(md_text):
             
         # Bulleted Lists
         elif line.startswith("- ") or line.startswith("* "):
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "bulleted_list_item",
                 "bulleted_list_item": {"rich_text": parse_inline_text(line[2:])}
             })
             
-        # Callouts
+        # Callouts and quotes
         elif line.startswith("> "):
             content = line[2:]
-            icon = "💡"
             alert_match = re.match(r'^\[!(.*?)\]\s*(.*)', content)
             if alert_match:
+                flush_quote_lines()
+                flush_callout_lines()
+                icon = "💡"
                 alert_type = alert_match.group(1).upper()
                 content = alert_match.group(2)
                 if "WARN" in alert_type: icon = "⚠️"
                 elif "ERROR" in alert_type or "DANGER" in alert_type: icon = "🚨"
                 elif "INFO" in alert_type: icon = "ℹ️"
                 elif "SUCCESS" in alert_type: icon = "✅"
-            
-            blocks.append({
-                "object": "block",
-                "type": "callout",
-                "callout": {
-                    "rich_text": parse_inline_text(content),
-                    "icon": {"emoji": icon}
-                }
-            })
+                callout_icon = icon
+                callout_lines.append(content)
+            else:
+                if callout_lines:
+                    callout_lines.append(content)
+                else:
+                    quote_lines.append(content)
             
         # Paragraph
         else:
+            flush_quote_lines()
+            flush_callout_lines()
             blocks.append({
                 "object": "block",
                 "type": "paragraph",
                 "paragraph": {"rich_text": parse_inline_text(line)}
             })
+
+    flush_quote_lines()
+    flush_callout_lines()
 
     if in_code_block:
         blocks.append({
@@ -273,12 +328,20 @@ def notion_blocks_to_md(blocks):
                 md_lines.append(f"- [{mark}] {text}")
             elif b_type == "callout":
                 icon = content.get("icon", {}).get("emoji", "💡")
-                prefix = "> "
-                if icon == "⚠️": prefix += "[!WARNING] "
-                elif icon == "🚨": prefix += "[!ERROR] "
-                elif icon == "ℹ️": prefix += "[!INFO] "
-                elif icon == "✅": prefix += "[!SUCCESS] "
-                md_lines.append(f"{prefix}{text}")
+                prefix = "[!NOTE]"
+                if icon == "⚠️": prefix = "[!WARNING]"
+                elif icon == "🚨": prefix = "[!ERROR]"
+                elif icon == "ℹ️": prefix = "[!INFO]"
+                elif icon == "✅": prefix = "[!SUCCESS]"
+                lines = text.split("\n") if text else [""]
+                md_lines.append(f"> {prefix} {lines[0]}".rstrip())
+                for line in lines[1:]:
+                    md_lines.append(f"> {line}")
+            elif b_type == "quote":
+                if text:
+                    md_lines.extend([f"> {line}" for line in text.split("\n")])
+                else:
+                    md_lines.append("> ")
             elif b_type == "paragraph":
                 md_lines.append(text)
             elif b_type == "code":
