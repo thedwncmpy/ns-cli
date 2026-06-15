@@ -17,6 +17,8 @@ The conversion happens in two layers: **Blocks** and **Inline Text**.
 ### 1. Block Parsing
 The parser reads your Markdown file line-by-line to identify the "type" of content:
 - **Headers**: Lines starting with `#`, `##`, or `###` become `heading_1`, `heading_2`, or `heading_3`.
+- **Toggleable H3**: `### [toggle] Section` becomes `heading_3` with `is_toggleable: true`.
+- **Toggle Children**: Indent content under a toggleable H3 by two spaces to nest it under that heading.
 - **Lists**: Lines starting with `-` or `*` become `bulleted_list_item`.
 - **Checklists**: Lines like `- [ ]` or `- [x]` become `to_do` blocks.
 - **Quotes**: Consecutive lines starting with `> ` are grouped into a single multiline `quote` block.
@@ -68,6 +70,8 @@ graph TD
 | Markdown | Notion Block Type | Notes |
 | :--- | :--- | :--- |
 | `# Title` | `heading_1` | Supports up to level 3 |
+| `### [toggle] Section` | `heading_3` | Sets `is_toggleable: true` |
+| `  Nested text` under a toggle | child block | Two-space indent nests content inside the toggle |
 | `- Item` | `bulleted_list_item` | |
 | `- [x] Done` | `to_do` | `checked: true` |
 | `> quoted line` | `quote` | Consecutive quoted lines are grouped |

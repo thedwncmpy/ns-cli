@@ -490,7 +490,7 @@ notion_cmd_download() {
   fi
 
   local blocks_response
-  blocks_response="$(notion_fetch_all_children_blocks "$page_id" "$notion_token")" || return 1
+  blocks_response="$(notion_fetch_block_tree "$page_id" "$notion_token")" || return 1
 
   if printf '%s' "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
     notion_print_error "Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"

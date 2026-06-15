@@ -160,3 +160,43 @@ notion_fetch_all_children_blocks() {
 
   jq -n --argjson results "$all" '{results: $results}'
 }
+
+notion_fetch_block_tree() {
+  local block_id="$1"
+  local token="$2"
+  local response results enriched='[]'
+
+  response="$(notion_fetch_all_children_blocks "$block_id" "$token")" || return 1
+  if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+    printf '%s\n' "$response"
+    return 0
+  fi
+
+  results="$(printf '%s' "$response" | jq -c '.results[]?')"
+  if [[ -z "$results" ]]; then
+    jq -n '{results: []}'
+    return 0
+  fi
+
+  local block block_type block_json block_has_children child_response child_results
+  while IFS= read -r block; do
+    [[ -n "$block" ]] || continue
+    block_type="$(printf '%s' "$block" | jq -r '.type')"
+    block_has_children="$(printf '%s' "$block" | jq -r '.has_children // false')"
+    block_json="$block"
+
+    if [[ "$block_has_children" == "true" ]]; then
+      child_response="$(notion_fetch_block_tree "$(printf '%s' "$block" | jq -r '.id')" "$token")" || return 1
+      if printf '%s' "$child_response" | jq -e '.object == "error"' >/dev/null; then
+        printf '%s\n' "$child_response"
+        return 0
+      fi
+      child_results="$(printf '%s' "$child_response" | jq '.results')"
+      block_json="$(printf '%s' "$block_json" | jq --arg type "$block_type" --argjson children "$child_results" '.[$type].children = $children')"
+    fi
+
+    enriched="$(jq -n --argjson acc "$enriched" --argjson item "$block_json" '$acc + [$item]')"
+  done <<< "$results"
+
+  jq -n --argjson results "$enriched" '{results: $results}'
+}

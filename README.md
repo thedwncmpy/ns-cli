@@ -26,6 +26,19 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 - Uploads local markdown to matching Notion pages
 - Downloads Notion pages into local markdown files (create or overwrite)
 
+## Markdown Notes
+
+- `### [toggle] Section` maps to a Notion toggleable heading 3 (`heading_3.is_toggleable = true`)
+- Indent blocks under that heading by two spaces to store them as toggle children and preserve them on download
+
+```md
+### [toggle] Section
+
+  Paragraph inside toggle
+
+  - Nested item
+```
+
 ## Command Overview
 
 ```bash
