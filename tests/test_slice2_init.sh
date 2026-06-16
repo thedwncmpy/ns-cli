@@ -72,6 +72,8 @@ actual_db="$(jq -r '.database_id' "$config_path")"
 actual_root="$(jq -r '.notes_root' "$config_path")"
 actual_root_canon="$(canonical_path "$actual_root")"
 [[ "$actual_root_canon" == "$abs_notes_root" ]] || fail "expected notes_root $abs_notes_root, got: $actual_root_canon"
+actual_title_prop="$(jq -r '.title_property' "$config_path")"
+[[ "$actual_title_prop" == "Name" ]] || fail "expected default title_property Name, got: $actual_title_prop"
 
 # Second run without force should fail and preserve file
 before_contents="$(cat "$config_path")"
@@ -94,6 +96,17 @@ assert_contains "$out" "Initialized config"
 
 actual_db="$(jq -r '.database_id' "$config_path")"
 [[ "$actual_db" == "db_456" ]] || fail "expected overwritten database_id db_456, got: $actual_db"
+
+# Explicit title property should be stored
+set +e
+out="$($CLI init --database-id db_789 --notes-root "$notes_root" --title-property Title --force 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$out" "Initialized config"
+
+actual_title_prop="$(jq -r '.title_property' "$config_path")"
+[[ "$actual_title_prop" == "Title" ]] || fail "expected explicit title_property Title, got: $actual_title_prop"
 
 # Help should work
 set +e

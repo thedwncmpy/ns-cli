@@ -23,7 +23,7 @@ notion_version_usage() {
 # Prints init command usage.
 # Example: notion_init_usage
 notion_init_usage() {
-  notion_print_usage "Usage: ns init --database-id <id> --notes-root <path> [--force]"
+  notion_print_usage "Usage: ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]"
 }
 
 # Prints link command usage.

@@ -7,16 +7,19 @@ notion_write_config() {
   local cfg_path="$1"
   local database_id="$2"
   local abs_notes_root="$3"
+  local title_property="${4:-Name}"
 
-  local db_escaped root_escaped
+  local db_escaped root_escaped title_escaped
   db_escaped="$(json_escape "$database_id")"
   root_escaped="$(json_escape "$abs_notes_root")"
+  title_escaped="$(json_escape "$title_property")"
 
   cat >"$cfg_path" <<JSON
 {
   "version": 1,
   "database_id": "$db_escaped",
   "notes_root": "$root_escaped",
+  "title_property": "$title_escaped",
   "mappings": {}
 }
 JSON
@@ -28,6 +31,7 @@ notion_init_config() {
   local database_id="$1"
   local notes_root="$2"
   local force="$3"
+  local title_property="${4:-Name}"
 
   local abs_notes_root="${notes_root:A}"
   local cfg_dir="$abs_notes_root/.notion-cli"
@@ -39,7 +43,7 @@ notion_init_config() {
   fi
 
   mkdir -p "$cfg_dir"
-  notion_write_config "$cfg_path" "$database_id" "$abs_notes_root"
+  notion_write_config "$cfg_path" "$database_id" "$abs_notes_root" "$title_property"
 
   notion_print_success "Initialized config at $cfg_path"
 }
@@ -70,6 +74,13 @@ notion_config_get_notes_root() {
 notion_config_get_database_id() {
   local config_path="$1"
   jq -r '.database_id // empty' "$config_path"
+}
+
+# Reads title_property from config (defaults to Name).
+# Example: title_prop="$(notion_config_get_title_property "$config_path")"
+notion_config_get_title_property() {
+  local config_path="$1"
+  jq -r '.title_property // "Name"' "$config_path"
 }
 
 # Reads relation_page_id mapping for a first-level segment.

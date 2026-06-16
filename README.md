@@ -42,7 +42,7 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 ## Command Overview
 
 ```bash
-ns init --database-id <id> --notes-root <path> [--force]
+ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]
 ns link <subdir> <relation_page_id> <relation_property> [--force]
 ns upload <file.md>
 ns download <file.md>
@@ -61,6 +61,12 @@ export NOTION_TOKEN="secret_xxx"
 
 ```bash
 ns init --database-id <notion_db_id> --notes-root ./notes
+```
+
+If your Notion database title column is not named `Name`, set it explicitly during init:
+
+```bash
+ns init --database-id <notion_db_id> --notes-root ./notes --title-property Title
 ```
 
 3. Map a first-level folder to a relation page id + relation property:
@@ -90,6 +96,7 @@ Example `.notion-cli/config.json`:
   "version": 1,
   "database_id": "db_test",
   "notes_root": "/absolute/path/to/notes",
+  "title_property": "Name",
   "mappings": {
     "project": {
       "relation_page_id": "rel_123",

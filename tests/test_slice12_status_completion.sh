@@ -35,6 +35,7 @@ assert_exit_code "$code" 0
 assert_contains "$completion_out" "#compdef ns"
 assert_contains "$completion_out" "status|upload|download"
 assert_contains "$completion_out" "_files -g \"*.md\""
+assert_contains "$completion_out" "--title-property"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
@@ -53,6 +54,7 @@ assert_exit_code "$code" 0
 assert_contains "$status_out" "Status"
 assert_contains "$status_out" "  File:"
 assert_contains "$status_out" "  Mapping Dir: project"
+assert_contains "$status_out" "  Title Prop: Name"
 assert_contains "$status_out" "  Relation Page: rel_123"
 assert_contains "$status_out" "  Query Filter:"
 

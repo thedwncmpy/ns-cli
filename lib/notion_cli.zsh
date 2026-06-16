@@ -12,6 +12,7 @@ source "$this_dir/migrations.zsh"
 notion_cmd_init() {
   local database_id=""
   local notes_root=""
+  local title_property="Name"
   local force=0
 
   while [[ $# -gt 0 ]]; do
@@ -34,6 +35,14 @@ notion_cmd_init() {
         return 1
       fi
       notes_root="$2"
+      shift 2
+      ;;
+    --title-property)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        notion_print_error "--title-property requires a value"
+        return 1
+      fi
+      title_property="$2"
       shift 2
       ;;
     --force)
@@ -60,7 +69,7 @@ notion_cmd_init() {
     return 1
   fi
 
-  notion_init_config "$database_id" "$notes_root" "$force"
+  notion_init_config "$database_id" "$notes_root" "$force" "$title_property"
 }
 
 notion_cmd_link() {
@@ -145,22 +154,23 @@ notion_cmd_link() {
 
 notion_build_query_payload() {
   local title="$1"
-  local relation_page_id="${2:-}"
-  local relation_property="${3:-}"
+  local title_property="$2"
+  local relation_page_id="${3:-}"
+  local relation_property="${4:-}"
 
   if [[ -n "$relation_page_id" ]]; then
-    jq -n --arg title "$title" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
+    jq -n --arg title "$title" --arg title_prop "$title_property" --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
       filter: {
         and: [
-          { property: "Name", title: { equals: $title } },
+          { property: $title_prop, title: { equals: $title } },
           { property: $rel_prop, relation: { contains: $relation } }
         ]
       }
     }'
   else
-    jq -n --arg title "$title" '{
+    jq -n --arg title "$title" --arg title_prop "$title_property" '{
       filter: {
-        property: "Name",
+        property: $title_prop,
         title: { equals: $title }
       }
     }'
@@ -278,6 +288,8 @@ notion_cmd_upload() {
 
   local database_id
   database_id="$(notion_config_get_database_id "$config_path")"
+  local title_property
+  title_property="$(notion_config_get_title_property "$config_path")"
 
   if [[ -z "$database_id" ]]; then
     notion_print_error "database_id missing in config. Re-run ns init."
@@ -307,7 +319,7 @@ notion_cmd_upload() {
   fi
 
   local filter search_response
-  filter="$(notion_build_query_payload "$title" "$relation_page_id" "$relation_property")"
+  filter="$(notion_build_query_payload "$title" "$title_property" "$relation_page_id" "$relation_property")"
 
   search_response="$(notion_query_all "$database_id" "$notion_token" "$filter")" || return 1
 
@@ -356,6 +368,7 @@ notion_cmd_upload() {
     if [[ -n "$relation_page_id" ]]; then
       payload="$(jq -n \
         --arg db "$database_id" \
+        --arg title_prop "$title_property" \
         --arg rel "$relation_page_id" \
         --arg rel_prop "$relation_property" \
         --arg page_title "$title" \
@@ -364,7 +377,7 @@ notion_cmd_upload() {
         '{
           parent: { database_id: $db },
           properties: {
-            Name: { title: [{ text: { content: $page_title } }] },
+            ($title_prop): { title: [{ text: { content: $page_title } }] },
             ($rel_prop): { relation: [{ id: $rel }] }
           },
           children: ($child_blocks[0][0:$first_chunk_count])
@@ -372,13 +385,14 @@ notion_cmd_upload() {
     else
       payload="$(jq -n \
         --arg db "$database_id" \
+        --arg title_prop "$title_property" \
         --arg page_title "$title" \
         --argjson first_chunk_count "$first_chunk_count" \
         --slurpfile child_blocks "$tmp_blocks" \
         '{
           parent: { database_id: $db },
           properties: {
-            Name: { title: [{ text: { content: $page_title } }] }
+            ($title_prop): { title: [{ text: { content: $page_title } }] }
           },
           children: ($child_blocks[0][0:$first_chunk_count])
         }')"
@@ -503,6 +517,8 @@ notion_cmd_download() {
 
   local database_id
   database_id="$(notion_config_get_database_id "$config_path")"
+  local title_property
+  title_property="$(notion_config_get_title_property "$config_path")"
 
   if [[ -z "$database_id" ]]; then
     notion_print_error "database_id missing in config. Re-run ns init."
@@ -510,7 +526,7 @@ notion_cmd_download() {
   fi
 
   local query_payload search_response
-  query_payload="$(notion_build_query_payload "$abs_target_name" "$relation_page_id" "$relation_property")"
+  query_payload="$(notion_build_query_payload "$abs_target_name" "$title_property" "$relation_page_id" "$relation_property")"
 
   search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
 
@@ -663,8 +679,9 @@ notion_cmd_status() {
   }
   first_segment="${relative_path%%/*}"
 
-  local database_id relation_page_id relation_property
+  local database_id title_property relation_page_id relation_property
   database_id="$(notion_config_get_database_id "$config_path")"
+  title_property="$(notion_config_get_title_property "$config_path")"
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
   if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
@@ -673,7 +690,7 @@ notion_cmd_status() {
   fi
 
   local query_payload
-  query_payload="$(notion_build_query_payload "$title" "$relation_page_id" "$relation_property")"
+  query_payload="$(notion_build_query_payload "$title" "$title_property" "$relation_page_id" "$relation_property")"
 
   local c_head="" c_key="" c_val="" c_reset=""
   if notion_is_tty; then
@@ -688,6 +705,7 @@ notion_cmd_status() {
   echo "${c_key}  Title${c_reset}: ${c_val}$title${c_reset}"
   echo "${c_key}  Config${c_reset}: ${c_val}$config_path${c_reset}"
   echo "${c_key}  Database${c_reset}: ${c_val}$database_id${c_reset}"
+  echo "${c_key}  Title Prop${c_reset}: ${c_val}$title_property${c_reset}"
   echo "${c_key}  Notes Root${c_reset}: ${c_val}$abs_notes_root${c_reset}"
   echo "${c_key}  Relative Path${c_reset}: ${c_val}$relative_path${c_reset}"
   echo "${c_key}  Mapping Dir${c_reset}: ${c_val}$first_segment${c_reset}"
@@ -730,7 +748,7 @@ _ns() {
 
   case "$cmd" in
     init)
-      COMPREPLY=( $(compgen -W "--database-id --notes-root --force --help" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--database-id --notes-root --title-property --force --help" -- "$cur") )
       ;;
     link)
       if [[ $COMP_CWORD -eq 2 ]]; then
@@ -779,7 +797,7 @@ _ns() {
     args)
       case $line[1] in
         init)
-          _arguments '--database-id[Notion database id]:database id:' '--notes-root[Notes root path]:notes root:_files -/' '--force[Overwrite existing config]'
+          _arguments '--database-id[Notion database id]:database id:' '--notes-root[Notes root path]:notes root:_files -/' '--title-property[Notion title property name]:title property:' '--force[Overwrite existing config]'
           ;;
         link)
           _arguments '1:subdir:_files -/' '2:relation page id:' '3:relation property:' '--force[Overwrite existing mapping]'
