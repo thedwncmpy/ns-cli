@@ -325,6 +325,15 @@ def parse_blocks(lines, start=0, base_indent=0):
         block = parse_single_block(line)
         i += 1
 
+        if block["type"] == "table_of_contents":
+            blocks.append(block)
+            blocks.append({
+                "object": "block",
+                "type": "divider",
+                "divider": {}
+            })
+            continue
+
         if block["type"] in ["heading_1", "heading_2", "heading_3"] and block[block["type"]].get("is_toggleable"):
             child_start = i
             child_indent = None
@@ -365,7 +374,7 @@ def render_block(block, indent=0):
     prefix = " " * indent
 
     if b_type == "table_of_contents":
-        lines = [f"{prefix}[TOC]"]
+        lines = [f"{prefix}[TOC]", "", f"{prefix}---"]
     elif b_type == "heading_1":
         toggle_prefix = TOGGLEABLE_HEADING_PREFIX if content.get("is_toggleable", False) else ""
         lines = [f"{prefix}# {toggle_prefix}{text}"]

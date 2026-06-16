@@ -34,6 +34,8 @@ fi
 
 input_md="$tmp_dir/toggle.md"
 cat > "$input_md" <<'EOF'
+[TOC]
+
 ## [toggle] Collapsible H2
   Child under h2
 
@@ -48,6 +50,8 @@ cat > "$input_md" <<'EOF'
 EOF
 
 json_out="$(python3 "$PARSER" "$input_md")"
+assert_contains "$json_out" '"type": "table_of_contents"'
+assert_contains "$json_out" '"type": "divider"'
 assert_contains "$json_out" '"type": "heading_2"'
 assert_contains "$json_out" '"is_toggleable": true'
 assert_contains "$json_out" '"content": "Collapsible H2"'
@@ -65,6 +69,11 @@ assert_contains "$json_out" '"content": "Plain Section"'
 reverse_in="$tmp_dir/blocks.json"
 cat > "$reverse_in" <<'EOF'
 [
+  {
+    "object": "block",
+    "type": "table_of_contents",
+    "table_of_contents": {}
+  },
   {
     "object": "block",
     "type": "heading_1",
@@ -175,7 +184,7 @@ cat > "$reverse_in" <<'EOF'
 EOF
 
 md_out="$(python3 "$PARSER" --reverse < "$reverse_in")"
-expected_md=$'# [toggle] Top Toggle\n\n  Paragraph inside h1 toggle\n\n## [toggle] Mid Toggle\n\n  Paragraph inside h2 toggle\n\n### [toggle] Collapsible Section\n\n  Paragraph inside toggle\n\n  - Nested item\n\n### Plain Section'
+expected_md=$'[TOC]\n\n---\n\n# [toggle] Top Toggle\n\n  Paragraph inside h1 toggle\n\n## [toggle] Mid Toggle\n\n  Paragraph inside h2 toggle\n\n### [toggle] Collapsible Section\n\n  Paragraph inside toggle\n\n  - Nested item\n\n### Plain Section'
 assert_eq "$md_out" "$expected_md"
 
 tab_input_md="$tmp_dir/toggle-tabs.md"
