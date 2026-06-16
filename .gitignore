@@ -1,2 +1,5 @@
 /notion
 *.tar.gz
+
+*.go
+__pycache__/

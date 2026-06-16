@@ -24,6 +24,7 @@ The parser reads your Markdown file line-by-line to identify the "type" of conte
 - **Quotes**: Consecutive lines starting with `> ` are grouped into a single multiline `quote` block.
 - **Callouts**: Alert syntax like `> [!WARNING]` starts a `callout` block, and following `> ` lines are included in the same multiline callout.
 - **Paragraphs**: Anything else is treated as a standard paragraph.
+- **Link to Page**: A line like `[[link_to_page page_id:...]]` or `[[link_to_page database_id:...]]` becomes a Notion `link_to_page` block.
 
 ### 2. Inline Text (The "Rich Text" Layer)
 Once a block is identified, the parser looks *inside* the text for styling:
@@ -47,6 +48,7 @@ When pulling data from Notion, the process is reversed:
 2. It checks properties (e.g., is `checked` true or false?).
 3. It converts the "rich text" array back into a single string with `**` or `*` markers.
 4. It prepends the correct Markdown symbol (like `- [x] `).
+5. `link_to_page` blocks are emitted as `[[link_to_page page_id:...]]` or `[[link_to_page database_id:...]]` so they can round-trip through markdown.
 
 ---
 
@@ -79,6 +81,7 @@ graph TD
 | `> quoted line` | `quote` | Consecutive quoted lines are grouped |
 | `> [!INFO] Hi` | `callout` | Uses ℹ️ icon and supports `> ` continuation lines |
 | `[TOC]` | `table_of_contents` | Special placeholder |
+| `[[link_to_page page_id:...]]` | `link_to_page` | Also supports `database_id` |
 
 ## Command Usage
 - **To Notion JSON**: `python3 lib/notion_parser.py my_note.md`

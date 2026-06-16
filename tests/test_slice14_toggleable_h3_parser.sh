@@ -88,6 +88,14 @@ cat > "$reverse_in" <<'EOF'
   },
   {
     "object": "block",
+    "type": "link_to_page",
+    "link_to_page": {
+      "type": "page_id",
+      "page_id": "12345678-1234-1234-1234-123456789abc"
+    }
+  },
+  {
+    "object": "block",
     "type": "heading_1",
     "heading_1": {
       "rich_text": [
@@ -196,8 +204,14 @@ cat > "$reverse_in" <<'EOF'
 EOF
 
 md_out="$(python3 "$PARSER" --reverse < "$reverse_in")"
-expected_md=$'[TOC]\n\n---\n\n# [toggle] Top Toggle\n\n  Paragraph inside h1 toggle\n\n## [toggle] Mid Toggle\n\n  Paragraph inside h2 toggle\n\n### [toggle] Collapsible Section\n\n  Paragraph inside toggle\n\n  - Nested item\n\n### Plain Section'
+expected_md=$'[TOC]\n\n---\n\n[[link_to_page page_id:12345678-1234-1234-1234-123456789abc]]\n\n# [toggle] Top Toggle\n\n  Paragraph inside h1 toggle\n\n## [toggle] Mid Toggle\n\n  Paragraph inside h2 toggle\n\n### [toggle] Collapsible Section\n\n  Paragraph inside toggle\n\n  - Nested item\n\n### Plain Section'
 assert_eq "$md_out" "$expected_md"
+
+roundtrip_md="$tmp_dir/roundtrip.md"
+printf '%s\n' "$md_out" > "$roundtrip_md"
+roundtrip_json="$(python3 "$PARSER" "$roundtrip_md")"
+assert_contains "$roundtrip_json" '"type": "link_to_page"'
+assert_contains "$roundtrip_json" '"page_id": "12345678-1234-1234-1234-123456789abc"'
 
 tab_input_md="$tmp_dir/toggle-tabs.md"
 cat > "$tab_input_md" <<'EOF'

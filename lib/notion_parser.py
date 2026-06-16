@@ -31,8 +31,7 @@ LANGUAGE_ALIASES = {
 
 TOGGLEABLE_HEADING_PREFIX = "[toggle] "
 INDENT_WIDTH = 2
-UNSUPPORTED_BLOCK_HEADER = "<!-- notion-unsupported-block"
-UNSUPPORTED_BLOCK_FOOTER = "-->"
+LINK_TO_PAGE_PATTERN = re.compile(r'^\[\[link_to_page\s+(page_id|database_id):([A-Za-z0-9-]+)\]\]$')
 
 
 def normalize_code_language(language):
@@ -155,12 +154,23 @@ def strip_indent(line, indent_units):
 
 def parse_single_block(line):
     stripped = line.strip()
+    link_to_page_match = LINK_TO_PAGE_PATTERN.match(stripped)
 
     if stripped == "[TOC]":
         return {
             "object": "block",
             "type": "table_of_contents",
             "table_of_contents": {}
+        }
+    if link_to_page_match:
+        link_type, link_id = link_to_page_match.groups()
+        return {
+            "object": "block",
+            "type": "link_to_page",
+            "link_to_page": {
+                "type": link_type,
+                link_type: link_id
+            }
         }
     if is_divider_marker(stripped):
         return {
@@ -239,33 +249,6 @@ def parse_single_block(line):
     }
 
 
-def parse_unsupported_block(lines, start, base_indent):
-    raw_json_lines = []
-    i = start + 1
-
-    while i < len(lines):
-        candidate = lines[i]
-        if indentation_units(candidate) < base_indent:
-            break
-        stripped = strip_indent(candidate, base_indent)
-        if stripped == UNSUPPORTED_BLOCK_FOOTER:
-            try:
-                block = json.loads("\n".join(raw_json_lines))
-            except json.JSONDecodeError:
-                return None, start
-            return block, i + 1
-        raw_json_lines.append(stripped)
-        i += 1
-
-    return None, start
-
-
-def render_unsupported_block(block, indent=0):
-    prefix = " " * indent
-    block_json = json.dumps(block, ensure_ascii=True, indent=2).splitlines()
-    return [f"{prefix}{UNSUPPORTED_BLOCK_HEADER}", *[f"{prefix}{line}" for line in block_json], f"{prefix}{UNSUPPORTED_BLOCK_FOOTER}"]
-
-
 def parse_blocks(lines, start=0, base_indent=0):
     blocks = []
     i = start
@@ -283,13 +266,6 @@ def parse_blocks(lines, start=0, base_indent=0):
             break
 
         line = strip_indent(raw_line, base_indent)
-
-        if line.strip() == UNSUPPORTED_BLOCK_HEADER:
-            block, next_index = parse_unsupported_block(lines, i, base_indent)
-            if block is not None:
-                blocks.append(block)
-                i = next_index
-                continue
 
         if line.strip().startswith("```"):
             lang = line.strip()[3:].strip()
@@ -491,8 +467,15 @@ def render_block(block, indent=0):
             for line in code_text.split("\n"):
                 lines.append(f"{prefix}{line}")
         lines.append(f"{prefix}```")
+    elif b_type == "link_to_page":
+        link_type = content.get("type")
+        link_id = content.get(link_type, "") if link_type else ""
+        if link_type in ["page_id", "database_id"] and link_id:
+            lines = [f"{prefix}[[link_to_page {link_type}:{link_id}]]"]
+        else:
+            return []
     else:
-        return render_unsupported_block(block, indent)
+        return []
 
     children = content.get("children", [])
     if children:
