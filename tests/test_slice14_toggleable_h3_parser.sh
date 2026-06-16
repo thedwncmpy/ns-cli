@@ -36,6 +36,8 @@ input_md="$tmp_dir/toggle.md"
 cat > "$input_md" <<'EOF'
 [TOC]
 
+---
+
 ## [toggle] Collapsible H2
   Child under h2
 
@@ -52,6 +54,11 @@ EOF
 json_out="$(python3 "$PARSER" "$input_md")"
 assert_contains "$json_out" '"type": "table_of_contents"'
 assert_contains "$json_out" '"type": "divider"'
+divider_count="$(printf '%s' "$json_out" | jq '[.[] | select(.type == "divider")] | length')"
+assert_eq "$divider_count" "1"
+if [[ "$json_out" == *'"content": "---"'* ]]; then
+  fail "divider marker after TOC should not be parsed as paragraph content"
+fi
 assert_contains "$json_out" '"type": "heading_2"'
 assert_contains "$json_out" '"is_toggleable": true'
 assert_contains "$json_out" '"content": "Collapsible H2"'

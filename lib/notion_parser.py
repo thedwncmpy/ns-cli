@@ -114,6 +114,10 @@ def parse_heading(text):
     }
 
 
+def is_divider_marker(text):
+    return text.strip() == "---"
+
+
 def indentation_units(line):
     units = 0
     for char in line:
@@ -155,6 +159,12 @@ def parse_single_block(line):
             "object": "block",
             "type": "table_of_contents",
             "table_of_contents": {}
+        }
+    if is_divider_marker(stripped):
+        return {
+            "object": "block",
+            "type": "divider",
+            "divider": {}
         }
     if stripped.startswith("# "):
         return {
@@ -332,6 +342,12 @@ def parse_blocks(lines, start=0, base_indent=0):
                 "type": "divider",
                 "divider": {}
             })
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            if i < len(lines) and indentation_units(lines[i]) == base_indent:
+                next_line = strip_indent(lines[i], base_indent)
+                if is_divider_marker(next_line):
+                    i += 1
             continue
 
         if block["type"] in ["heading_1", "heading_2", "heading_3"] and block[block["type"]].get("is_toggleable"):
@@ -375,6 +391,8 @@ def render_block(block, indent=0):
 
     if b_type == "table_of_contents":
         lines = [f"{prefix}[TOC]", "", f"{prefix}---"]
+    elif b_type == "divider":
+        lines = [f"{prefix}---"]
     elif b_type == "heading_1":
         toggle_prefix = TOGGLEABLE_HEADING_PREFIX if content.get("is_toggleable", False) else ""
         lines = [f"{prefix}# {toggle_prefix}{text}"]
