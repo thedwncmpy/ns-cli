@@ -17,6 +17,12 @@ assert_contains() {
   fi
 }
 
+with_props() {
+  local props="$1"
+  local body="$2"
+  printf '<!-- notion-properties\n%s\n-->\n\n%s' "$props" "$body"
+}
+
 if [[ ! -x "$CLI" ]]; then
   fail "missing executable: $CLI"
 fi
@@ -65,7 +71,7 @@ if [[ "$args" == *"-X POST"*"/v1/pages"* ]]; then
     printf '{"id":"page_new"}'
   fi
 elif [[ "$args" == *"-X POST"*"/v1/databases/"*"/query"*"nested-note"* ]]; then
-  printf '{"results":[{"id":"page_nested"}],"has_more":false}'
+  printf '{"results":[{"id":"page_nested","properties":{"Name":{"id":"title","type":"title","title":[{"plain_text":"nested-note"}]},"Done":{"id":"done","type":"checkbox","checkbox":false}}}],"has_more":false}'
 elif [[ "$args" == *"/v1/databases/"*"/query"* ]]; then
   if [[ "$args" == *"create-large"* ]]; then
     printf '{"results":[],"has_more":false}'
@@ -121,5 +127,8 @@ out="$(cd "$notes_root" && "$CLI" download "project/deep/nested/nested-note.md" 
 assert_contains "$out" "Downloaded 'nested-note'"
 [[ -f "$notes_root/project/deep/nested/nested-note.md" ]] || fail "expected nested download file"
 assert_contains "$(cat "$SLICE10_CURL_LOG")" "page_nested/children?start_cursor=cursor1"
+expected_nested="$(with_props '{"Done":{"checkbox":false}}' $'# nested\nfrom-pagination')"
+actual_nested="$(cat "$notes_root/project/deep/nested/nested-note.md")"
+[[ "$actual_nested" == "$expected_nested" ]] || fail "unexpected nested download content: $actual_nested"
 
 echo "PASS: slice 10 reliability hardening contract"

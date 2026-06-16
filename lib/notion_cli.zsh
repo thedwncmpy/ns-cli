@@ -9,6 +9,9 @@ source "$this_dir/config.zsh"
 source "$this_dir/relation_resolver.zsh"
 source "$this_dir/migrations.zsh"
 
+NOTION_PROPERTIES_HEADER="<!-- notion-properties"
+NOTION_PROPERTIES_FOOTER="-->"
+
 notion_cmd_init() {
   local database_id=""
   local notes_root=""
@@ -201,6 +204,147 @@ notion_print_sync_intent() {
   fi
 }
 
+notion_split_markdown_properties() {
+  local source_file="$1"
+  local content_out="$2"
+  local props_out="$3"
+
+  : > "$props_out"
+
+  if [[ ! -s "$source_file" ]]; then
+    : > "$content_out"
+    return 0
+  fi
+
+  local first_line=""
+  IFS= read -r first_line < "$source_file" || true
+  if [[ "$first_line" != "$NOTION_PROPERTIES_HEADER" ]]; then
+    cp "$source_file" "$content_out"
+    return 0
+  fi
+
+  awk -v content_out="$content_out" -v props_out="$props_out" -v footer="$NOTION_PROPERTIES_FOOTER" '
+    BEGIN { in_meta = 0; content_started = 0 }
+    NR == 1 { in_meta = 1; next }
+    in_meta {
+      if ($0 == footer) {
+        in_meta = 0
+        next
+      }
+      print >> props_out
+      next
+    }
+    !content_started && $0 == "" { next }
+    {
+      content_started = 1
+      print >> content_out
+    }
+  ' "$source_file"
+
+  if [[ ! -s "$content_out" ]]; then
+    : > "$content_out"
+  fi
+}
+
+notion_extract_frontmatter_properties() {
+  local source_file="$1"
+  local tmp_content="$2"
+  local tmp_props="$3"
+
+  notion_split_markdown_properties "$source_file" "$tmp_content" "$tmp_props"
+  if [[ ! -s "$tmp_props" ]]; then
+    echo '{}'
+    return 0
+  fi
+
+  if ! jq -e . "$tmp_props" >/dev/null 2>&1; then
+    notion_print_error "invalid notion-properties metadata in '$source_file'"
+    return 1
+  fi
+
+  jq -c . "$tmp_props"
+}
+
+notion_render_markdown_with_properties() {
+  local properties_json="$1"
+  local markdown_body="$2"
+
+  if [[ "$properties_json" == "{}" ]]; then
+    printf "%s\n" "$markdown_body"
+    return 0
+  fi
+
+  printf "%s\n%s\n%s\n\n%s\n" "$NOTION_PROPERTIES_HEADER" "$properties_json" "$NOTION_PROPERTIES_FOOTER" "$markdown_body"
+}
+
+notion_serializable_page_properties() {
+  local page_json="$1"
+  local title_property="$2"
+  local relation_property="${3:-}"
+
+  printf '%s' "$page_json" | jq -c --arg title_prop "$title_property" --arg relation_prop "$relation_property" '
+    def payload:
+      if .type == "checkbox" then {checkbox: .checkbox}
+      elif .type == "number" then {number: .number}
+      elif .type == "url" then {url: .url}
+      elif .type == "email" then {email: .email}
+      elif .type == "phone_number" then {phone_number: .phone_number}
+      elif .type == "date" then {date: .date}
+      elif .type == "select" then {select: (if .select == null then null else {name: .select.name} end)}
+      elif .type == "status" then {status: (if .status == null then null else {name: .status.name} end)}
+      elif .type == "multi_select" then {multi_select: (.multi_select | map({name: .name}))}
+      elif .type == "relation" then {relation: (.relation | map({id: .id}))}
+      elif .type == "people" then {people: (.people | map({id: .id}))}
+      elif .type == "rich_text" then {rich_text: .rich_text}
+      else empty
+      end;
+    (.properties // {})
+    | to_entries
+    | map(select(.key != $title_prop and (.key != $relation_prop or $relation_prop == "")))
+    | map(select(
+        .value.type != "created_time" and
+        .value.type != "created_by" and
+        .value.type != "last_edited_time" and
+        .value.type != "last_edited_by" and
+        .value.type != "formula" and
+        .value.type != "rollup" and
+        .value.type != "unique_id" and
+        .value.type != "verification" and
+        .value.type != "button"
+      ))
+    | map({key: .key, value: (.value | payload)})
+    | map(select(.value != null))
+    | from_entries
+  '
+}
+
+notion_merge_upload_properties() {
+  local existing_props_json="$1"
+  local local_props_json="$2"
+  local title_property="$3"
+  local title="$4"
+  local relation_property="${5:-}"
+  local relation_page_id="${6:-}"
+
+  jq -nc \
+    --argjson existing "$existing_props_json" \
+    --argjson local_props "$local_props_json" \
+    --arg title_prop "$title_property" \
+    --arg page_title "$title" \
+    --arg rel_prop "$relation_property" \
+    --arg rel_id "$relation_page_id" '
+    ($existing + $local_props) as $merged
+    | ($merged + {
+        ($title_prop): { title: [{ text: { content: $page_title } }] }
+      }) as $with_title
+    | if $rel_prop != "" and $rel_id != "" then
+        $with_title + { ($rel_prop): { relation: [{ id: $rel_id }] } }
+      else
+        $with_title
+      end
+  '
+}
+
 notion_cmd_upload() {
   local dry_run=0
   if [[ "${1:-}" == "--dry-run" ]]; then
@@ -305,15 +449,21 @@ notion_cmd_upload() {
     return 1
   fi
 
-  local tmp_blocks
+  local tmp_blocks tmp_content tmp_props local_props_json
   tmp_blocks="$(mktemp)"
-  if ! python3 "$parser_path" "$abs_file" > "$tmp_blocks"; then
-    rm -f "$tmp_blocks"
+  tmp_content="$(mktemp)"
+  tmp_props="$(mktemp)"
+  local_props_json="$(notion_extract_frontmatter_properties "$abs_file" "$tmp_content" "$tmp_props")" || {
+    rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
+    return 1
+  }
+  if ! python3 "$parser_path" "$tmp_content" > "$tmp_blocks"; then
+    rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
     notion_print_error "failed to parse markdown with $parser_path"
     return 1
   fi
   if ! jq -e . "$tmp_blocks" >/dev/null 2>&1; then
-    rm -f "$tmp_blocks"
+    rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
     notion_print_error "parser produced invalid JSON for '$abs_file'"
     return 1
   fi
@@ -345,13 +495,19 @@ notion_cmd_upload() {
   local total_blocks
   total_blocks="$(jq 'length' "$tmp_blocks")"
 
-  local page_id response
+  local page_id response existing_props_json merged_props_json
   page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
+  if [[ -n "$page_id" ]]; then
+    existing_props_json="$(notion_serializable_page_properties "$(printf '%s' "$search_response" | jq -c '.results[0]')" "$title_property" "$relation_property")"
+  else
+    existing_props_json='{}'
+  fi
+  merged_props_json="$(notion_merge_upload_properties "$existing_props_json" "$local_props_json" "$title_property" "$title" "$relation_property" "$relation_page_id")"
 
   if [[ -n "$page_id" ]]; then
     response="$(notion_api_request "PATCH" "https://api.notion.com/v1/pages/$page_id" "$notion_token" '{"archived":true}')" || return 1
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      rm -f "$tmp_blocks"
+      rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
       notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
       return 1
     fi
@@ -368,32 +524,23 @@ notion_cmd_upload() {
     if [[ -n "$relation_page_id" ]]; then
       payload="$(jq -n \
         --arg db "$database_id" \
-        --arg title_prop "$title_property" \
-        --arg rel "$relation_page_id" \
-        --arg rel_prop "$relation_property" \
-        --arg page_title "$title" \
         --argjson first_chunk_count "$first_chunk_count" \
+        --argjson props "$merged_props_json" \
         --slurpfile child_blocks "$tmp_blocks" \
         '{
           parent: { database_id: $db },
-          properties: {
-            ($title_prop): { title: [{ text: { content: $page_title } }] },
-            ($rel_prop): { relation: [{ id: $rel }] }
-          },
+          properties: $props,
           children: ($child_blocks[0][0:$first_chunk_count])
         }')"
     else
       payload="$(jq -n \
         --arg db "$database_id" \
-        --arg title_prop "$title_property" \
-        --arg page_title "$title" \
         --argjson first_chunk_count "$first_chunk_count" \
+        --argjson props "$merged_props_json" \
         --slurpfile child_blocks "$tmp_blocks" \
         '{
           parent: { database_id: $db },
-          properties: {
-            ($title_prop): { title: [{ text: { content: $page_title } }] }
-          },
+          properties: $props,
           children: ($child_blocks[0][0:$first_chunk_count])
         }')"
     fi
@@ -401,14 +548,14 @@ notion_cmd_upload() {
     response="$(notion_api_request "POST" "https://api.notion.com/v1/pages" "$notion_token" "$payload")" || return 1
 
     if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-      rm -f "$tmp_blocks"
+      rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
       notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
       return 1
     fi
 
     page_id="$(printf '%s' "$response" | jq -r '.id // empty')"
     if [[ -z "$page_id" ]]; then
-      rm -f "$tmp_blocks"
+      rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
       notion_print_error "Notion sync failed: create response missing page id."
       return 1
     fi
@@ -421,7 +568,7 @@ notion_cmd_upload() {
         '{children: ($child_blocks[0][$start:($start+100)])}')"
       response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
       if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
-        rm -f "$tmp_blocks"
+        rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
         notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
         return 1
       fi
@@ -429,7 +576,7 @@ notion_cmd_upload() {
     done
   fi
 
-  rm -f "$tmp_blocks"
+  rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
 
   notion_print_success "Uploaded '$title' successfully."
   return 0
@@ -535,7 +682,7 @@ notion_cmd_download() {
     return 1
   fi
 
-  local match_count page_id
+  local match_count page_id page_json properties_json
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
 
   if [[ "$match_count" -eq 0 ]]; then
@@ -563,6 +710,8 @@ notion_cmd_download() {
     notion_print_error "failed to resolve remote page id."
     return 1
   fi
+  page_json="$(printf '%s' "$search_response" | jq -c '.results[0]')"
+  properties_json="$(notion_serializable_page_properties "$page_json" "$title_property" "$relation_property")"
 
   local blocks_response
   blocks_response="$(notion_fetch_block_tree "$page_id" "$notion_token")" || return 1
@@ -587,7 +736,7 @@ notion_cmd_download() {
   fi
 
   mkdir -p "$abs_target_path"
-  printf "%s\n" "$md_content" >"$abs_target"
+  notion_render_markdown_with_properties "$properties_json" "$md_content" >"$abs_target"
   notion_print_success "Downloaded '$abs_target_name' to $abs_target"
   return 0
 }
