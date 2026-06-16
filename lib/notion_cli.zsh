@@ -365,21 +365,68 @@ notion_serializable_page_icon() {
 notion_build_page_create_payload() {
   local database_id="$1"
   local page_metadata_json="$2"
-  local tmp_blocks="$3"
-  local first_chunk_count="$4"
 
   jq -n \
     --arg db "$database_id" \
     --argjson meta "$page_metadata_json" \
-    --argjson first_chunk_count "$first_chunk_count" \
-    --slurpfile child_blocks "$tmp_blocks" '
+    '
     {
       parent: { database_id: $db },
-      properties: $meta.properties,
-      children: ($child_blocks[0][0:$first_chunk_count])
+      properties: $meta.properties
     }
     + (if $meta.icon == null then {} else {icon: $meta.icon} end)
   '
+}
+
+notion_append_block_children_tree() {
+  local parent_id="$1"
+  local notion_token="$2"
+  local blocks_json="$3"
+  local total start chunk payload response count idx child_blocks child_count child_parent_id
+
+  total="$(printf '%s' "$blocks_json" | jq 'length')"
+  start=0
+  while [[ "$start" -lt "$total" ]]; do
+    chunk="$(printf '%s' "$blocks_json" | jq -c --argjson start "$start" '.[$start:($start + 100)]')"
+    payload="$(printf '%s' "$chunk" | jq '{
+      children: map(
+        . as $block
+        | ($block.type) as $type
+        | $block
+        | .[$type] |= del(.children)
+      )
+    }')"
+
+    response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$parent_id/children" "$notion_token" "$payload")" || return 1
+    if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+      printf '%s\n' "$response"
+      return 0
+    fi
+
+    count="$(printf '%s' "$chunk" | jq 'length')"
+    idx=0
+    while [[ "$idx" -lt "$count" ]]; do
+      child_blocks="$(printf '%s' "$chunk" | jq -c --argjson idx "$idx" '.[$idx] as $block | ($block.type) as $type | $block[$type].children // []')"
+      child_count="$(printf '%s' "$child_blocks" | jq 'length')"
+      if [[ "$child_count" -gt 0 ]]; then
+        child_parent_id="$(printf '%s' "$response" | jq -r --argjson idx "$idx" '.results[$idx].id // empty')"
+        if [[ -z "$child_parent_id" ]]; then
+          jq -n --arg message "Notion append response missing child block id for nested upload." '{object:"error", message:$message}'
+          return 0
+        fi
+        response="$(notion_append_block_children_tree "$child_parent_id" "$notion_token" "$child_blocks")" || return 1
+        if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+          printf '%s\n' "$response"
+          return 0
+        fi
+      fi
+      idx=$((idx + 1))
+    done
+
+    start=$((start + 100))
+  done
+
+  jq -n '{object:"list", results: []}'
 }
 
 notion_build_download_metadata() {
@@ -594,13 +641,8 @@ notion_cmd_upload() {
   fi
 
   if [[ -z "$page_id" ]]; then
-    local payload first_chunk_count start chunk_payload
-    if [[ "$total_blocks" -gt 100 ]]; then
-      first_chunk_count=100
-    else
-      first_chunk_count="$total_blocks"
-    fi
-    payload="$(notion_build_page_create_payload "$database_id" "$merged_metadata_json" "$tmp_blocks" "$first_chunk_count")"
+    local payload blocks_json
+    payload="$(notion_build_page_create_payload "$database_id" "$merged_metadata_json")"
 
     response="$(notion_api_request "POST" "https://api.notion.com/v1/pages" "$notion_token" "$payload")" || return 1
 
@@ -617,20 +659,15 @@ notion_cmd_upload() {
       return 1
     fi
 
-    start=100
-    while [[ "$start" -lt "$total_blocks" ]]; do
-      chunk_payload="$(jq -n \
-        --argjson start "$start" \
-        --slurpfile child_blocks "$tmp_blocks" \
-        '{children: ($child_blocks[0][$start:($start+100)])}')"
-      response="$(notion_api_request "PATCH" "https://api.notion.com/v1/blocks/$page_id/children" "$notion_token" "$chunk_payload")" || return 1
+    if [[ "$total_blocks" -gt 0 ]]; then
+      blocks_json="$(jq -c . "$tmp_blocks")"
+      response="$(notion_append_block_children_tree "$page_id" "$notion_token" "$blocks_json")" || return 1
       if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
         rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
         notion_print_error "Notion sync failed: $(printf '%s' "$response" | jq -r '.message')"
         return 1
       fi
-      start=$((start + 100))
-    done
+    fi
   fi
 
   rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"

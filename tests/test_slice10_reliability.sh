@@ -118,9 +118,9 @@ out="$(cd "$notes_root" && "$CLI" upload "project/existing.md" 2>&1)"
 assert_contains "$out" "Uploaded 'existing' successfully."
 assert_contains "$(cat "$SLICE10_CURL_LOG")" "-X PATCH https://api.notion.com/v1/pages/page_existing"
 
-# Ensure chunking occurred: both create paths use one POST + two PATCH calls for 250 blocks each.
+# Ensure chunking occurred: both create paths use three PATCH calls for 250 blocks each.
 patch_count="$(grep -c -- "-X PATCH https://api.notion.com/v1/blocks/page_new/children" "$SLICE10_CURL_LOG" || true)"
-[[ "$patch_count" -eq 4 ]] || fail "expected 4 PATCH calls for page_new across two uploads, got $patch_count"
+[[ "$patch_count" -eq 6 ]] || fail "expected 6 PATCH calls for page_new across two uploads, got $patch_count"
 
 # Nested download should succeed and create parent directories while using paginated block fetch.
 out="$(cd "$notes_root" && "$CLI" download "project/deep/nested/nested-note.md" 2>&1)"
