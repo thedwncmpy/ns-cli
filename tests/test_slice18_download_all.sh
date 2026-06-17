@@ -89,14 +89,14 @@ export NOTION_PARSER_PATH="$parser_stub"
 export SLICE18_CURL_LOG="$tmp_dir/curl.log"
 
 set +e
-help_out="$("$CLI" download-all --help 2>&1)"
+help_out="$("$CLI" download-sync --help 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$help_out" "Usage: ns download-all"
+assert_contains "$help_out" "Usage: ns download-sync"
 
 set +e
-out="$(cd "$notes_root" && "$CLI" download-all 2>&1)"
+out="$(cd "$notes_root" && "$CLI" download-sync 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
@@ -113,7 +113,7 @@ query_count="$(grep -c -- "/v1/databases/db_test/query" "$SLICE18_CURL_LOG" || t
 empty_dir="$tmp_dir/empty"
 mkdir -p "$empty_dir"
 set +e
-empty_out="$(cd "$empty_dir" && "$CLI" download-all 2>&1)"
+empty_out="$(cd "$empty_dir" && "$CLI" download-sync 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1

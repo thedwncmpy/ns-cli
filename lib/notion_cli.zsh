@@ -884,7 +884,7 @@ notion_cmd_download_all() {
     return 0
   fi
   if [[ $# -gt 0 ]]; then
-    notion_print_error "download-all does not accept file arguments"
+    notion_print_error "download-sync does not accept file arguments"
     notion_download_all_usage
     return 1
   fi
@@ -912,7 +912,7 @@ notion_cmd_download_all() {
   done
 
   if [[ "$failures" -gt 0 ]]; then
-    notion_print_error "download-all failed for $failures file(s)"
+    notion_print_error "download-sync failed for $failures file(s)"
     return 1
   fi
 
@@ -931,7 +931,7 @@ notion_cmd_upload_all() {
     return 0
   fi
   if [[ $# -gt 0 ]]; then
-    notion_print_error "upload-all does not accept file arguments"
+    notion_print_error "upload-sync does not accept file arguments"
     notion_upload_all_usage
     return 1
   fi
@@ -959,7 +959,7 @@ notion_cmd_upload_all() {
   done
 
   if [[ "$failures" -gt 0 ]]; then
-    notion_print_error "upload-all failed for $failures file(s)"
+    notion_print_error "upload-sync failed for $failures file(s)"
     return 1
   fi
 
@@ -997,13 +997,13 @@ notion_main() {
   upload)
     notion_cmd_upload "$@"
     ;;
-  upload-all)
+  upload-sync)
     notion_cmd_upload_all "$@"
     ;;
   download)
     notion_cmd_download "$@"
     ;;
-  download-all)
+  download-sync)
     notion_cmd_download_all "$@"
     ;;
   *)
@@ -1123,7 +1123,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-all download download-all completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-sync download download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1141,7 +1141,7 @@ _ns() {
     status|upload|download)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
       ;;
-    upload-all|download-all)
+    upload-sync|download-sync)
       COMPREPLY=( $(compgen -W "--dry-run --help" -- "$cur") )
       ;;
     completion)
@@ -1174,9 +1174,9 @@ _ns() {
         'link[Map directory to relation]' \
         'status[Show resolved sync intent]' \
         'upload[Upload markdown file]' \
-        'upload-all[Upload all markdown files under current directory]' \
+        'upload-sync[Upload all markdown files under current directory]' \
         'download[Download markdown file]' \
-        'download-all[Download all markdown files under current directory]' \
+        'download-sync[Download all markdown files under current directory]' \
         'completion[Print completion script]' \
         'version[Show ns version]'
       ;;
@@ -1191,10 +1191,10 @@ _ns() {
         status|upload|download)
           _arguments '1:markdown file:_files -g "*.md"'
           ;;
-        upload-all)
+        upload-sync)
           _arguments '--dry-run[Show upload intent for each markdown file]' '--help[Show help]'
           ;;
-        download-all)
+        download-sync)
           _arguments '--dry-run[Show download intent for each markdown file]' '--help[Show help]'
           ;;
         completion)

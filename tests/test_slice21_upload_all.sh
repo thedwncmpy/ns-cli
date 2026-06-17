@@ -79,14 +79,14 @@ export NOTION_TOKEN="test_token"
 export SLICE21_CURL_LOG="$tmp_dir/curl.log"
 
 set +e
-help_out="$("$CLI" upload-all --help 2>&1)"
+help_out="$("$CLI" upload-sync --help 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$help_out" "Usage: ns upload-all"
+assert_contains "$help_out" "Usage: ns upload-sync"
 
 set +e
-out="$(cd "$notes_root/project/deep" && "$CLI" upload-all 2>&1)"
+out="$(cd "$notes_root/project/deep" && "$CLI" upload-sync 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
@@ -98,13 +98,13 @@ query_count="$(grep -c -- "/v1/databases/db_test/query" "$SLICE21_CURL_LOG" || t
 [[ "$query_count" -eq 2 ]] || fail "expected 2 database queries, got $query_count"
 
 if grep -q '"equals":"gamma"' "$SLICE21_CURL_LOG"; then
-  fail "upload-all should not upload sibling directory markdown files"
+  fail "upload-sync should not upload sibling directory markdown files"
 fi
 
 empty_dir="$tmp_dir/empty"
 mkdir -p "$empty_dir"
 set +e
-empty_out="$(cd "$empty_dir" && "$CLI" upload-all 2>&1)"
+empty_out="$(cd "$empty_dir" && "$CLI" upload-sync 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 1
