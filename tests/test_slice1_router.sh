@@ -54,8 +54,10 @@ set -e
 assert_exit_code "$code" 0
 assert_contains "$out" "Commands:"
 assert_contains "$out" "upload"
+assert_contains "$out" "upload-all"
 assert_contains "$out" "upload-sync"
 assert_contains "$out" "download"
+assert_contains "$out" "download-all"
 assert_contains "$out" "download-sync"
 assert_contains "$out" "status"
 
@@ -70,7 +72,7 @@ assert_contains "$out" "Unknown command: frob"
 # Test Case: Smoke tests for command dispatching
 # Ensures that 'init', 'link', 'upload', and 'download' are correctly routed 
 # to their respective handlers when the --help flag is used.
-for cmd in init link status upload upload-sync download download-sync; do
+for cmd in init link status upload upload-all upload-sync download download-all download-sync; do
   set +e
   out="$($CLI "$cmd" --help 2>&1)"
   code=$?

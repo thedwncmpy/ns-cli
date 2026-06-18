@@ -45,7 +45,11 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]
 ns link <subdir> <relation_page_id> <relation_property> [--force]
 ns upload <file.md>
+ns upload-all [--dry-run]
+ns upload-sync [--dry-run]
 ns download <file.md>
+ns download-all [--dry-run]
+ns download-sync [--dry-run]
 ns completion zsh
 ```
 
@@ -81,11 +85,27 @@ ns link project rel_123 notebook
 ns upload ./notes/project/today.md
 ```
 
-5. Download a note (creates or overwrites local file):
+5. Upload every markdown file in the current scope:
+
+```bash
+cd ./notes/project
+ns upload-all
+```
+
+6. Download a note (creates or overwrites local file):
 
 ```bash
 ns download ./notes/project/today.md
 ```
+
+7. Download every page in the current scope:
+
+```bash
+cd ./notes/project
+ns download-all
+```
+
+Run `download-all` from `notes_root` to materialize the full database. Run it from a linked directory to only download pages whose configured relation contains that linked page id.
 
 ## Config Shape
 

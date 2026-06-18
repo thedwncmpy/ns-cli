@@ -180,6 +180,156 @@ notion_build_query_payload() {
   fi
 }
 
+notion_build_relation_filter_payload() {
+  local relation_page_id="$1"
+  local relation_property="$2"
+
+  jq -n --arg relation "$relation_page_id" --arg rel_prop "$relation_property" '{
+    filter: {
+      property: $rel_prop,
+      relation: { contains: $relation }
+    }
+  }'
+}
+
+notion_current_scope_mapping_json() {
+  local config_path="$1"
+  local notes_root="$2"
+  local cwd="${PWD:A}"
+  local abs_notes_root="${notes_root:A}"
+  local relative_to_root=""
+
+  if [[ "$cwd" == "$abs_notes_root" || "$cwd" == "$abs_notes_root/" ]]; then
+    jq -nc '{mapping_dir:"", relation_page_id:"", relation_property:""}'
+    return 0
+  fi
+
+  if [[ "$cwd" == "$abs_notes_root"/* ]]; then
+    relative_to_root="${cwd#$abs_notes_root/}"
+    local first_segment="${relative_to_root%%/*}"
+    local relation_page_id relation_property
+    relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
+    relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
+    if [[ -n "$relation_page_id" ]]; then
+      jq -nc --arg mapping_dir "$first_segment" --arg relation_page_id "$relation_page_id" --arg relation_property "$relation_property" \
+        '{mapping_dir:$mapping_dir, relation_page_id:$relation_page_id, relation_property:$relation_property}'
+      return 0
+    fi
+  fi
+
+  jq -nc '{mapping_dir:"", relation_page_id:"", relation_property:""}'
+}
+
+notion_page_title_from_json() {
+  local page_json="$1"
+  local title_property="$2"
+
+  printf '%s' "$page_json" | jq -r --arg title_prop "$title_property" '
+    .properties[$title_prop].title // []
+    | map(.plain_text // .text.content // "")
+    | join("")
+  '
+}
+
+notion_download_page_to_target() {
+  local page_json="$1"
+  local abs_target="$2"
+  local notion_token="$3"
+  local title_property="$4"
+  local relation_property="${5:-}"
+
+  local page_id properties_json icon_json metadata_json
+  page_id="$(printf '%s' "$page_json" | jq -r '.id // empty')"
+  if [[ -z "$page_id" ]]; then
+    notion_print_error "failed to resolve remote page id."
+    return 1
+  fi
+
+  properties_json="$(notion_serializable_page_properties "$page_json" "$title_property" "$relation_property")"
+  icon_json="$(notion_serializable_page_icon "$page_json")"
+  metadata_json="$(notion_build_download_metadata "$properties_json" "$icon_json")"
+
+  local blocks_response
+  blocks_response="$(notion_fetch_block_tree "$page_id" "$notion_token")" || return 1
+  if printf '%s' "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
+    notion_print_error "Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"
+    return 1
+  fi
+
+  local parser_path md_content
+  parser_path="$(notion_parser_path)"
+  if [[ ! -f "$parser_path" ]]; then
+    notion_print_error "notion parser not found at $parser_path"
+    notion_print_error "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
+    return 1
+  fi
+
+  if ! md_content="$(printf '%s' "$blocks_response" | jq '.results' | python3 "$parser_path" --reverse)"; then
+    notion_print_error "failed to convert notion blocks to markdown with $parser_path"
+    return 1
+  fi
+
+  mkdir -p "${abs_target%/*}"
+  local display_name="${${abs_target##*/}%.md}"
+  notion_render_markdown_with_properties "$metadata_json" "$md_content" >"$abs_target"
+  notion_print_success "Downloaded '$display_name' to $abs_target"
+}
+
+notion_page_target_for_download_all() {
+  local page_json="$1"
+  local config_path="$2"
+  local notes_root="$3"
+  local title_property="$4"
+  local forced_mapping_dir="${5:-}"
+  local forced_relation_property="${6:-}"
+
+  local title
+  title="$(notion_page_title_from_json "$page_json" "$title_property")"
+  if [[ -z "$title" ]]; then
+    jq -nc '{object:"error", message:"page missing title"}'
+    return 0
+  fi
+
+  if [[ -n "$forced_mapping_dir" ]]; then
+    jq -nc --arg target "$notes_root/$forced_mapping_dir/$title.md" --arg relation_property "$forced_relation_property" \
+      '{target:$target, relation_property:$relation_property}'
+    return 0
+  fi
+
+  local mapping_match
+  mapping_match="$(jq -c --argjson page "$page_json" '
+    (.mappings // {})
+    | to_entries
+    | map(
+        . as $entry
+        | ($entry.value.relation_page_id // $entry.value // "") as $rel_id
+        | ($entry.value.relation_property // "notebook") as $rel_prop
+        | select(
+            $rel_id != ""
+            and (($page.properties[$rel_prop].relation // []) | map(.id) | index($rel_id)) != null
+          )
+        | {mapping_dir: $entry.key, relation_property: $rel_prop}
+      )
+  ' "$config_path")"
+
+  local match_count
+  match_count="$(printf '%s' "$mapping_match" | jq 'length')"
+  if [[ "$match_count" -gt 1 ]]; then
+    jq -nc --arg title "$title" '{object:"error", message:("page \"" + $title + "\" matches multiple directory mappings")}'
+    return 0
+  fi
+
+  if [[ "$match_count" -eq 1 ]]; then
+    jq -nc \
+      --arg target "$notes_root/$(printf '%s' "$mapping_match" | jq -r '.[0].mapping_dir')/$title.md" \
+      --arg relation_property "$(printf '%s' "$mapping_match" | jq -r '.[0].relation_property')" \
+      '{target:$target, relation_property:$relation_property}'
+    return 0
+  fi
+
+  jq -nc --arg target "$notes_root/$title.md" '{target:$target, relation_property:""}'
+}
+
 notion_print_sync_intent() {
   local action="$1"
   local file_path="$2"
@@ -812,7 +962,7 @@ notion_cmd_download() {
     return 1
   fi
 
-  local match_count page_id page_json properties_json icon_json metadata_json
+  local match_count page_json
   match_count="$(printf '%s' "$search_response" | jq '.results | length')"
 
   if [[ "$match_count" -eq 0 ]]; then
@@ -835,42 +985,8 @@ notion_cmd_download() {
     return 1
   fi
 
-  page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
-  if [[ -z "$page_id" ]]; then
-    notion_print_error "failed to resolve remote page id."
-    return 1
-  fi
   page_json="$(printf '%s' "$search_response" | jq -c '.results[0]')"
-  properties_json="$(notion_serializable_page_properties "$page_json" "$title_property" "$relation_property")"
-  icon_json="$(notion_serializable_page_icon "$page_json")"
-  metadata_json="$(notion_build_download_metadata "$properties_json" "$icon_json")"
-
-  local blocks_response
-  blocks_response="$(notion_fetch_block_tree "$page_id" "$notion_token")" || return 1
-
-  if printf '%s' "$blocks_response" | jq -e '.object == "error"' >/dev/null; then
-    notion_print_error "Notion block fetch failed: $(printf '%s' "$blocks_response" | jq -r '.message')"
-    return 1
-  fi
-
-  local parser_path md_content
-  parser_path="$(notion_parser_path)"
-
-  if [[ ! -f "$parser_path" ]]; then
-    notion_print_error "notion parser not found at $parser_path"
-    notion_print_error "Set NOTION_PARSER_PATH or ensure lib/notion_parser.py is installed."
-    return 1
-  fi
-
-  if ! md_content="$(printf '%s' "$blocks_response" | jq '.results' | python3 "$parser_path" --reverse)"; then
-    notion_print_error "failed to convert notion blocks to markdown with $parser_path"
-    return 1
-  fi
-
-  mkdir -p "$abs_target_path"
-  notion_render_markdown_with_properties "$metadata_json" "$md_content" >"$abs_target"
-  notion_print_success "Downloaded '$abs_target_name' to $abs_target"
-  return 0
+  notion_download_page_to_target "$page_json" "$abs_target" "$notion_token" "$title_property" "$relation_property"
 }
 
 notion_cmd_download_all() {
@@ -880,12 +996,12 @@ notion_cmd_download_all() {
     shift
   fi
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    notion_download_all_usage
+    notion_download_sync_usage
     return 0
   fi
   if [[ $# -gt 0 ]]; then
     notion_print_error "download-sync does not accept file arguments"
-    notion_download_all_usage
+    notion_download_sync_usage
     return 1
   fi
 
@@ -927,12 +1043,12 @@ notion_cmd_upload_all() {
     shift
   fi
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    notion_upload_all_usage
+    notion_upload_sync_usage
     return 0
   fi
   if [[ $# -gt 0 ]]; then
     notion_print_error "upload-sync does not accept file arguments"
-    notion_upload_all_usage
+    notion_upload_sync_usage
     return 1
   fi
 
@@ -967,6 +1083,112 @@ notion_cmd_upload_all() {
   return 0
 }
 
+notion_cmd_upload_database_scope() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_upload_all_usage
+    return 0
+  fi
+  if [[ $# -gt 0 && "${1:-}" != "--dry-run" ]]; then
+    notion_print_error "upload-all does not accept file arguments"
+    notion_upload_all_usage
+    return 1
+  fi
+
+  notion_cmd_upload_all "$@"
+}
+
+notion_cmd_download_database_scope() {
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_download_all_usage
+    return 0
+  fi
+  if [[ $# -gt 0 ]]; then
+    notion_print_error "download-all does not accept file arguments"
+    notion_download_all_usage
+    return 1
+  fi
+
+  local config_path
+  config_path="$(notion_find_and_prepare_config)" || {
+    notion_print_error "No project config found. Run 'ns init' first."
+    return 1
+  }
+
+  local notes_root database_id title_property notion_token
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  database_id="$(notion_config_get_database_id "$config_path")"
+  title_property="$(notion_config_get_title_property "$config_path")"
+  notion_token="$(notion_require_token)" || return 1
+
+  if [[ -z "$database_id" ]]; then
+    notion_print_error "database_id missing in config. Re-run ns init."
+    return 1
+  fi
+
+  local scope_json mapping_dir relation_page_id relation_property query_payload
+  scope_json="$(notion_current_scope_mapping_json "$config_path" "$notes_root")"
+  mapping_dir="$(printf '%s' "$scope_json" | jq -r '.mapping_dir')"
+  relation_page_id="$(printf '%s' "$scope_json" | jq -r '.relation_page_id')"
+  relation_property="$(printf '%s' "$scope_json" | jq -r '.relation_property')"
+
+  if [[ -n "$relation_page_id" ]]; then
+    query_payload="$(notion_build_relation_filter_payload "$relation_page_id" "$relation_property")"
+  else
+    query_payload='{}'
+  fi
+
+  local search_response
+  search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
+  if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    notion_print_error "Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
+    return 1
+  fi
+
+  local pages
+  pages="$(printf '%s' "$search_response" | jq -c '.results[]?')"
+  if [[ -z "$pages" ]]; then
+    notion_print_error "no remote pages found in current sync scope"
+    return 1
+  fi
+
+  local page page_target_json abs_target target_relation_property title processed=0 failures=0
+  while IFS= read -r page; do
+    [[ -n "$page" ]] || continue
+    page_target_json="$(notion_page_target_for_download_all "$page" "$config_path" "$notes_root" "$title_property" "$mapping_dir" "$relation_property")"
+    if printf '%s' "$page_target_json" | jq -e '.object == "error"' >/dev/null 2>&1; then
+      notion_print_error "$(printf '%s' "$page_target_json" | jq -r '.message')"
+      failures=$((failures + 1))
+      continue
+    fi
+
+    abs_target="$(printf '%s' "$page_target_json" | jq -r '.target')"
+    target_relation_property="$(printf '%s' "$page_target_json" | jq -r '.relation_property')"
+    title="$(notion_page_title_from_json "$page" "$title_property")"
+
+    if [[ "$dry_run" -eq 1 ]]; then
+      echo "  file: $abs_target"
+      echo "  title: $title"
+      echo "  action: overwrite local file from remote page"
+    else
+      notion_download_page_to_target "$page" "$abs_target" "$notion_token" "$title_property" "$target_relation_property" || failures=$((failures + 1))
+    fi
+    processed=$((processed + 1))
+  done <<< "$pages"
+
+  if [[ "$failures" -gt 0 ]]; then
+    notion_print_error "download-all failed for $failures page(s)"
+    return 1
+  fi
+
+  notion_print_success "Processed $processed page(s)."
+  return 0
+}
+
 notion_main() {
   local cmd="${1:-}"
   if [[ -z "$cmd" ]]; then
@@ -997,11 +1219,17 @@ notion_main() {
   upload)
     notion_cmd_upload "$@"
     ;;
+  upload-all)
+    notion_cmd_upload_database_scope "$@"
+    ;;
   upload-sync)
     notion_cmd_upload_all "$@"
     ;;
   download)
     notion_cmd_download "$@"
+    ;;
+  download-all)
+    notion_cmd_download_database_scope "$@"
     ;;
   download-sync)
     notion_cmd_download_all "$@"
@@ -1123,7 +1351,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-sync download download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync download download-all download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1141,7 +1369,7 @@ _ns() {
     status|upload|download)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
       ;;
-    upload-sync|download-sync)
+    upload-all|upload-sync|download-all|download-sync)
       COMPREPLY=( $(compgen -W "--dry-run --help" -- "$cur") )
       ;;
     completion)
@@ -1174,8 +1402,10 @@ _ns() {
         'link[Map directory to relation]' \
         'status[Show resolved sync intent]' \
         'upload[Upload markdown file]' \
+        'upload-all[Upload all markdown files in current sync scope]' \
         'upload-sync[Upload all markdown files under current directory]' \
         'download[Download markdown file]' \
+        'download-all[Download all Notion pages in current sync scope]' \
         'download-sync[Download all markdown files under current directory]' \
         'completion[Print completion script]' \
         'version[Show ns version]'
@@ -1191,11 +1421,11 @@ _ns() {
         status|upload|download)
           _arguments '1:markdown file:_files -g "*.md"'
           ;;
-        upload-sync)
+        upload-all|upload-sync)
           _arguments '--dry-run[Show upload intent for each markdown file]' '--help[Show help]'
           ;;
-        download-sync)
-          _arguments '--dry-run[Show download intent for each markdown file]' '--help[Show help]'
+        download-all|download-sync)
+          _arguments '--dry-run[Show download intent for each item in scope]' '--help[Show help]'
           ;;
         completion)
           _values 'shell' zsh bash

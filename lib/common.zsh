@@ -12,8 +12,10 @@ notion_usage() {
   notion_print_usage "  completion Print shell completion script"
   notion_print_usage "  version    Show ns version"
   notion_print_usage "  upload     Upload a markdown file to Notion"
+  notion_print_usage "  upload-all Upload all markdown files in the current sync scope"
   notion_print_usage "  upload-sync Upload all markdown files under current directory"
   notion_print_usage "  download   Download a markdown file from Notion"
+  notion_print_usage "  download-all Download all Notion pages in the current sync scope"
   notion_print_usage "  download-sync Download all markdown files under current directory"
   notion_print_usage "  help       Show this help"
 }
@@ -41,6 +43,10 @@ notion_upload_usage() {
 }
 
 notion_upload_all_usage() {
+  notion_print_usage "Usage: ns upload-all [--dry-run]"
+}
+
+notion_upload_sync_usage() {
   notion_print_usage "Usage: ns upload-sync [--dry-run]"
 }
 
@@ -51,6 +57,10 @@ notion_download_usage() {
 }
 
 notion_download_all_usage() {
+  notion_print_usage "Usage: ns download-all [--dry-run]"
+}
+
+notion_download_sync_usage() {
   notion_print_usage "Usage: ns download-sync [--dry-run]"
 }
 
