@@ -26,6 +26,7 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 - Keeps secrets separate via `NOTION_TOKEN` (env) or `~/.config/notion-cli/secrets.zsh`
 - Uploads local markdown to matching Notion pages
 - Downloads Notion pages into local markdown files (create or overwrite)
+- Deletes local markdown files and archives matching Notion pages
 
 ## Markdown Notes
 
@@ -49,6 +50,7 @@ ns upload <file.md>
 ns upload-all [--dry-run]
 ns upload-sync [--dry-run]
 ns download <file.md>
+ns delete [--dry-run] <file.md>
 ns download-all [--dry-run]
 ns download-sync [--dry-run]
 ns completion zsh
@@ -99,7 +101,13 @@ ns upload-all
 ns download ./notes/project/today.md
 ```
 
-7. Download every page in the current scope:
+7. Delete a note locally and archive the matching Notion page:
+
+```bash
+ns delete ./notes/project/today.md
+```
+
+8. Download every page in the current scope:
 
 ```bash
 cd ./notes/project

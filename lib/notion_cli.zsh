@@ -1033,6 +1033,141 @@ notion_cmd_download() {
   notion_download_page_to_target "$page_json" "$abs_target" "$notion_token" "$config_path" "$abs_notes_root" "$title_property" "$relation_property"
 }
 
+notion_cmd_delete() {
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_delete_usage
+    return 0
+  fi
+
+  local file="${1:-}"
+  if [[ -z "$file" ]]; then
+    notion_print_error "delete requires <file.md>"
+    notion_delete_usage
+    return 1
+  fi
+
+  if [[ "$file" != *.md ]]; then
+    notion_print_error "delete requires a <*.md>"
+    notion_delete_usage
+    return 1
+  fi
+
+  local abs_file="${file:a}"
+  local title="${abs_file:t:r}"
+  local config_path
+  config_path="$(notion_find_and_prepare_config)" || {
+    notion_print_error "No project config found. Run 'ns init' first."
+    return 1
+  }
+
+  local notes_root abs_notes_root
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  abs_notes_root="${notes_root:A}"
+  if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
+    return 1
+  fi
+
+  local relative_path first_segment
+  relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
+    return 1
+  }
+  first_segment="${relative_path%%/*}"
+
+  local relation_page_id relation_property
+  relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
+  relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
+  if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
+    notion_print_error "no mapping found for first-level directory '$first_segment'"
+    return 1
+  fi
+
+  local sidecar_path
+  sidecar_path="$(notion_metadata_sidecar_path "$config_path" "$relative_path")"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    notion_print_info "Dry-run delete intent:"
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_sync_intent "query exact title+relation; archive remote page and delete local file" "$abs_file" "$title" "$abs_notes_root" "$first_segment" "$relation_page_id" "$relation_property"
+    else
+      notion_print_sync_intent "query exact title; archive remote page and delete local file" "$abs_file" "$title" "$abs_notes_root" "$first_segment" "$relation_page_id" "$relation_property"
+    fi
+    echo "  local_file_exists: $([[ -f "$abs_file" ]] && echo yes || echo no)"
+    echo "  sidecar_exists: $([[ -f "$sidecar_path" ]] && echo yes || echo no)"
+    return 0
+  fi
+
+  if ! notion_require_token >/dev/null; then
+    return 1
+  fi
+
+  local notion_token
+  notion_token="$(notion_require_token)"
+  local database_id title_property
+  database_id="$(notion_config_get_database_id "$config_path")"
+  title_property="$(notion_config_get_title_property "$config_path")"
+
+  if [[ -z "$database_id" ]]; then
+    notion_print_error "database_id missing in config. Re-run ns init."
+    return 1
+  fi
+
+  local query_payload search_response
+  query_payload="$(notion_build_query_payload "$title" "$title_property" "$relation_page_id" "$relation_property")"
+  search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
+
+  if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    notion_print_error "Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
+    return 1
+  fi
+
+  local match_count page_id response
+  match_count="$(printf '%s' "$search_response" | jq '.results | length')"
+  if [[ "$match_count" -eq 0 ]]; then
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_error "no remote page found for '$title' in relation '$first_segment'"
+    else
+      notion_print_error "no remote page found for '$title'"
+    fi
+    return 1
+  fi
+
+  if [[ "$match_count" -gt 1 ]]; then
+    if [[ -n "$relation_page_id" ]]; then
+      notion_print_error "ambiguous match for title '$title' in relation '$first_segment' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title+relation page exists."
+    else
+      notion_print_error "ambiguous match for title '$title' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title page exists."
+    fi
+    return 1
+  fi
+
+  page_id="$(printf '%s' "$search_response" | jq -r '.results[0].id // empty')"
+  if [[ -z "$page_id" ]]; then
+    notion_print_error "Notion delete failed: query response missing page id."
+    return 1
+  fi
+
+  response="$(notion_api_request "PATCH" "https://api.notion.com/v1/pages/$page_id" "$notion_token" '{"archived":true}')" || return 1
+  if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+    notion_print_error "Notion delete failed: $(printf '%s' "$response" | jq -r '.message')"
+    return 1
+  fi
+
+  rm -f "$abs_file"
+  rm -f "$sidecar_path"
+
+  notion_print_success "Deleted '$title' locally and archived the remote page."
+  return 0
+}
+
 notion_cmd_download_all() {
   local dry_run=0
   if [[ "${1:-}" == "--dry-run" ]]; then
@@ -1272,6 +1407,9 @@ notion_main() {
   download)
     notion_cmd_download "$@"
     ;;
+  delete)
+    notion_cmd_delete "$@"
+    ;;
   download-all)
     notion_cmd_download_database_scope "$@"
     ;;
@@ -1395,7 +1533,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync download download-all download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync download delete download-all download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1410,7 +1548,7 @@ _ns() {
         COMPREPLY=( $(compgen -W "--force --help" -- "$cur") )
       fi
       ;;
-    status|upload|download)
+    status|upload|download|delete)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
       ;;
     upload-all|upload-sync|download-all|download-sync)
@@ -1449,6 +1587,7 @@ _ns() {
         'upload-all[Upload all markdown files in current sync scope]' \
         'upload-sync[Upload all markdown files under current directory]' \
         'download[Download markdown file]' \
+        'delete[Delete markdown file locally and archive matching Notion page]' \
         'download-all[Download all Notion pages in current sync scope]' \
         'download-sync[Download all markdown files under current directory]' \
         'completion[Print completion script]' \
@@ -1462,7 +1601,7 @@ _ns() {
         link)
           _arguments '1:subdir:_files -/' '2:relation page id:' '3:relation property:' '--force[Overwrite existing mapping]'
           ;;
-        status|upload|download)
+        status|upload|download|delete)
           _arguments '1:markdown file:_files -g "*.md"'
           ;;
         upload-all|upload-sync)
