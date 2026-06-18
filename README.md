@@ -1,11 +1,11 @@
 # notion-cli
 
-`notion-cli` is a lightweight command-line tool for strict two-way sync between local markdown files and a Notion database.
+`notion-cli` is a lightweight command-line tool for strict sync between local Markdown files and a Notion database.
 
-The MVP keeps sync behavior deterministic:
+The CLI keeps sync behavior deterministic:
 - Exact filename-stem to Notion title matching
 - First-level directory to relation mapping
-- Strict failures on ambiguity/mismatch
+- Strict failures on ambiguity and mismatch
 - Single command surface: `ns`
 
 ## Install
@@ -19,14 +19,23 @@ brew install thedwncmpy/homebrew-notion-cli/notion
 
 If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 
+## Requirements
+
+- `zsh`
+- `python3`
+- `jq`
+- `curl`
+- A Notion integration token with access to the target database
+
 ## What It Does
 
 - Stores project config in `.notion-cli/config.json`
-- Stores per-page Notion properties/icons in `.notion-cli/pages/*.json`
-- Keeps secrets separate via `NOTION_TOKEN` (env) or `~/.config/notion-cli/secrets.zsh`
-- Uploads local markdown to matching Notion pages
-- Downloads Notion pages into local markdown files (create or overwrite)
-- Deletes local markdown files and archives matching Notion pages
+- Stores per-page Notion properties and icons in `.notion-cli/pages/**/*.json`
+- Reads secrets from `NOTION_TOKEN` or `~/.config/notion-cli/secrets.zsh`
+- Uploads local Markdown to Notion
+- Downloads Notion pages into local Markdown files
+- Deletes local Markdown files and archives matching Notion pages
+- Supports both mapped subdirectories and root-level notes
 
 ## Markdown Notes
 
@@ -46,14 +55,16 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 ```bash
 ns init --database-id <id> --notes-root <path> [--title-property <name>] [--force]
 ns link <subdir> <relation_page_id> <relation_property> [--force]
-ns upload <file.md>
+ns status [<file.md>]
+ns upload [--dry-run] <file.md>
 ns upload-all [--dry-run]
 ns upload-sync [--dry-run]
-ns download <file.md>
+ns download [--dry-run] <file.md>
 ns delete [--dry-run] <file.md>
 ns download-all [--dry-run]
 ns download-sync [--dry-run]
-ns completion zsh
+ns completion <zsh|bash>
+ns version
 ```
 
 ## Quick Start
@@ -63,6 +74,14 @@ ns completion zsh
 ```bash
 export NOTION_TOKEN="secret_xxx"
 ```
+
+Or store it in `~/.config/notion-cli/secrets.zsh`:
+
+```bash
+export NOTION_TOKEN="secret_xxx"
+```
+
+Environment variables take precedence over the secrets file.
 
 2. Initialize a project:
 
@@ -76,7 +95,7 @@ If your Notion database title column is not named `Name`, set it explicitly duri
 ns init --database-id <notion_db_id> --notes-root ./notes --title-property Title
 ```
 
-3. Map a first-level folder to a relation page id + relation property:
+3. Map a first-level folder to a relation page id and relation property:
 
 ```bash
 ns link project rel_123 notebook
@@ -88,26 +107,34 @@ ns link project rel_123 notebook
 ns upload ./notes/project/today.md
 ```
 
-5. Upload every markdown file in the current scope:
+5. Upload every Markdown file in the current scope:
 
 ```bash
 cd ./notes/project
 ns upload-all
 ```
 
-6. Download a note (creates or overwrites local file):
+6. Inspect resolved sync behavior for one note:
+
+```bash
+ns status ./notes/project/today.md
+```
+
+Run `ns status` with no file argument to print the project config JSON.
+
+7. Download a note:
 
 ```bash
 ns download ./notes/project/today.md
 ```
 
-7. Delete a note locally and archive the matching Notion page:
+8. Delete a note locally and archive the matching Notion page:
 
 ```bash
 ns delete ./notes/project/today.md
 ```
 
-8. Download every page in the current scope:
+9. Download every page in the current scope:
 
 ```bash
 cd ./notes/project
@@ -147,17 +174,25 @@ In legacy mode, relation property defaults to `notebook`.
 
 ## Guardrails
 
-- `upload`/`download` require `.md`
-- Target file must be inside configured `notes_root`
-- Mapping must exist for the first-level directory
-- Exact title + mapped relation query only
+- `upload`, `download`, and `delete` require `.md`
+- Target paths must be inside configured `notes_root`
+- Mapping must exist for the first-level directory when the file is not at the root of `notes_root`
+- Root-level files are allowed without a mapping
+- Mapped files use exact title plus mapped relation queries
+- Root-level files use exact title-only queries
 - Ambiguous matches fail hard
 
+## Current Behavior Notes
 
+- `upload-all` and `upload-sync` currently behave the same: both upload Markdown files under the current directory recursively.
+- `download-sync` works from local file discovery and does not discover remote-only pages.
+- When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
+- Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.
+- `download-all` run from `notes_root` can place unmatched pages at the root when no directory mapping applies, and fails per page if multiple mappings fit.
 
 ## Shell Completion
 
-For zsh, load completion in your shell startup:
+Load completion in your shell startup:
 
 ```bash
 eval "$(ns completion zsh)"
