@@ -39,8 +39,32 @@ If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 
 ## Markdown Notes
 
-- `### [toggle] Section` maps to a Notion toggleable heading 3 (`heading_3.is_toggleable = true`)
-- Indent blocks under that heading by two spaces to store them as toggle children and preserve them on download
+Supported Markdown components:
+
+| Markdown | Notion block | Notes |
+| --- | --- | --- |
+| Plain text | `paragraph` | Default fallback for non-special lines |
+| `# Title` | `heading_1` | Headings supported through level 3 |
+| `## Title` | `heading_2` | |
+| `### Title` | `heading_3` | |
+| `# [toggle] Section` | `heading_1` | Sets `is_toggleable: true` |
+| `## [toggle] Section` | `heading_2` | Sets `is_toggleable: true` |
+| `### [toggle] Section` | `heading_3` | Sets `is_toggleable: true` |
+| Indented content under a toggle | nested children | Use a two-space indent to preserve toggle children on download |
+| `- Item` or `* Item` | `bulleted_list_item` | Supports nested children by indentation |
+| `- [ ] Task` | `to_do` | Unchecked to-do |
+| `- [x] Task` | `to_do` | Checked to-do |
+| `> Quote` | `quote` | Consecutive quoted lines are grouped into one block |
+| `> [!NOTE] Text` | `callout` | Also supports `INFO`, `WARNING`, `ERROR`, and `SUCCESS` |
+| Fenced code block | `code` | Unknown languages normalize to `plain text` |
+| `---` | `divider` | Horizontal divider |
+| `[TOC]` | `table_of_contents` | Round-trips as a TOC placeholder |
+| `[[link_to_page page_id:...]]` | `link_to_page` | Also supports `database_id` |
+
+Inline rich text is also preserved for supported blocks:
+- `**bold**`
+- `*italic*`
+- `***bold italic***`
 
 ```md
 ### [toggle] Section
