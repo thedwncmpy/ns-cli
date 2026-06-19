@@ -15,6 +15,17 @@ notion_config_migrate_in_place() {
   version="$(jq -r '.version // 0' "$config_path")"
 
   if [[ "$version" == "1" ]]; then
+    local tmp_cfg
+    tmp_cfg="$(mktemp)"
+    jq '
+      .watch = ((.watch // {}) + {
+        auto_upload_on_save: (.watch.auto_upload_on_save // false),
+        cooldown_seconds: (.watch.cooldown_seconds // 60)
+      })
+      | .sync_state = (.sync_state // {})
+      | .sync_state.uploads = (.sync_state.uploads // {})
+    ' "$config_path" >"$tmp_cfg"
+    mv "$tmp_cfg" "$config_path"
     return 0
   fi
 

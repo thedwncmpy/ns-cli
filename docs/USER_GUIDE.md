@@ -95,6 +95,13 @@ Example `.ns-cli/config.json`:
       "relation_page_id": "rel_123",
       "relation_property": "notebook"
     }
+  },
+  "watch": {
+    "auto_upload_on_save": false,
+    "cooldown_seconds": 60
+  },
+  "sync_state": {
+    "uploads": {}
   }
 }
 ```
@@ -200,6 +207,27 @@ ns upload-sync [--dry-run]
 ```
 
 Current implementation behavior matches `ns upload-all`: it uploads all Markdown files under the current directory recursively.
+
+### `ns watch`
+
+```bash
+ns watch [--enable|--disable] [--cooldown-seconds <n>]
+```
+
+Behavior:
+
+- Watches `notes_root` for changed `.md` files.
+- Reuses the existing `ns upload` flow for each changed file.
+- Stores `watch.auto_upload_on_save` and `watch.cooldown_seconds` in project config.
+- Stores per-file `sync_state.uploads[<relative-path>].last_uploaded_at` timestamps in project config.
+- Skips re-uploading the same file until the cooldown window expires.
+
+Examples:
+
+```bash
+ns watch --enable --cooldown-seconds 60
+ns watch --disable
+```
 
 ### `ns download`
 

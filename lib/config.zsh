@@ -20,7 +20,14 @@ notion_write_config() {
   "database_id": "$db_escaped",
   "notes_root": "$root_escaped",
   "title_property": "$title_escaped",
-  "mappings": {}
+  "mappings": {},
+  "watch": {
+    "auto_upload_on_save": false,
+    "cooldown_seconds": 60
+  },
+  "sync_state": {
+    "uploads": {}
+  }
 }
 JSON
 }
@@ -97,4 +104,57 @@ notion_config_get_mapping_relation_property() {
   local config_path="$1"
   local segment="$2"
   jq -r --arg seg "$segment" '.mappings[$seg].relation_property // "notebook"' "$config_path"
+}
+
+notion_config_get_watch_auto_upload_on_save() {
+  local config_path="$1"
+  jq -r '.watch.auto_upload_on_save // false' "$config_path"
+}
+
+notion_config_get_watch_cooldown_seconds() {
+  local config_path="$1"
+  jq -r '.watch.cooldown_seconds // 60' "$config_path"
+}
+
+notion_config_set_watch_settings() {
+  local config_path="$1"
+  local auto_upload_on_save="$2"
+  local cooldown_seconds="$3"
+  local tmp_cfg
+
+  tmp_cfg="$(mktemp)"
+  jq \
+    --argjson enabled "$auto_upload_on_save" \
+    --argjson cooldown "$cooldown_seconds" \
+    '
+      .watch = ((.watch // {}) + {
+        auto_upload_on_save: $enabled,
+        cooldown_seconds: $cooldown
+      })
+    ' "$config_path" >"$tmp_cfg"
+  mv "$tmp_cfg" "$config_path"
+}
+
+notion_config_get_last_upload_epoch() {
+  local config_path="$1"
+  local relative_path="$2"
+  jq -r --arg rel "$relative_path" '.sync_state.uploads[$rel].last_uploaded_at // 0' "$config_path"
+}
+
+notion_config_set_last_upload_epoch() {
+  local config_path="$1"
+  local relative_path="$2"
+  local epoch="$3"
+  local tmp_cfg
+
+  tmp_cfg="$(mktemp)"
+  jq \
+    --arg rel "$relative_path" \
+    --argjson epoch "$epoch" \
+    '
+      .sync_state = (.sync_state // {})
+      | .sync_state.uploads = (.sync_state.uploads // {})
+      | .sync_state.uploads[$rel] = { last_uploaded_at: $epoch }
+    ' "$config_path" >"$tmp_cfg"
+  mv "$tmp_cfg" "$config_path"
 }

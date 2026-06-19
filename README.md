@@ -1,4 +1,4 @@
-# notion-cli
+# ns-cli
 
 `notion-cli` is a lightweight command-line tool for strict sync between local Markdown files and a Notion database.
 
@@ -83,6 +83,7 @@ ns status [<file.md>]
 ns upload [--dry-run] <file.md>
 ns upload-all [--dry-run]
 ns upload-sync [--dry-run]
+ns watch [--enable|--disable] [--cooldown-seconds <n>]
 ns download [--dry-run] <file.md>
 ns delete [--dry-run] <file.md>
 ns download-all [--dry-run]
@@ -138,6 +139,12 @@ cd ./notes/project
 ns upload-all
 ```
 
+Or enable watch mode with a one-minute per-file cooldown:
+
+```bash
+ns watch --enable --cooldown-seconds 60
+```
+
 6. Inspect resolved sync behavior for one note:
 
 ```bash
@@ -182,6 +189,13 @@ Example `.notion-cli/config.json`:
       "relation_page_id": "rel_123",
       "relation_property": "notebook"
     }
+  },
+  "watch": {
+    "auto_upload_on_save": false,
+    "cooldown_seconds": 60
+  },
+  "sync_state": {
+    "uploads": {}
   }
 }
 ```
@@ -209,6 +223,8 @@ In legacy mode, relation property defaults to `notebook`.
 ## Current Behavior Notes
 
 - `upload-all` and `upload-sync` currently behave the same: both upload Markdown files under the current directory recursively.
+- `watch` polls `notes_root` for changed Markdown files and reuses `ns upload` for each changed file.
+- `watch` records per-file `last_uploaded_at` timestamps in config and skips re-uploading the same file until the configured cooldown expires.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
 - Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.

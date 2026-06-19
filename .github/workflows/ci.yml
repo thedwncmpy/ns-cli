@@ -1,5 +1,9 @@
 name: CI
 
+env:
+  HOMEBREW_TAP_REPOSITORY: thedwncmpy/homebrew-notion-cli
+  HOMEBREW_TAP_PATH: homebrew-notion-cli
+
 on:
   push:
   pull_request:
@@ -20,10 +24,10 @@ jobs:
       - name: Checkout homebrew formula repo
         uses: actions/checkout@v4
         with:
-          repository: thedwncmpy/homebrew-notion-cli
-          path: homebrew-notion-cli
+          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
+          path: ${{ env.HOMEBREW_TAP_PATH }}
       - name: Link formula repo at expected sibling path
-        run: ln -s "$GITHUB_WORKSPACE/homebrew-notion-cli" "$GITHUB_WORKSPACE/../homebrew-notion-cli"
+        run: ln -s "$GITHUB_WORKSPACE/${{ env.HOMEBREW_TAP_PATH }}" "$GITHUB_WORKSPACE/../${{ env.HOMEBREW_TAP_PATH }}"
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -62,9 +66,9 @@ jobs:
       - name: Checkout tap repo
         uses: actions/checkout@v4
         with:
-          repository: thedwncmpy/homebrew-notion-cli
+          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-notion-cli
+          path: ${{ env.HOMEBREW_TAP_PATH }}
 
       - name: Update formula url/version/sha256
         env:
@@ -76,7 +80,7 @@ jobs:
             echo "Error: TAG is required. Provide workflow_dispatch input 'release_tag' (example: v0.1.9)."
             exit 1
           fi
-          FORMULA="homebrew-notion-cli/Formula/ns.rb"
+          FORMULA="${{ env.HOMEBREW_TAP_PATH }}/Formula/ns.rb"
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
           SHA="$(curl -fsSL "$TARBALL_URL" | sha256sum | awk '{print $1}')"
           VERSION="${TAG#v}"
@@ -89,7 +93,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-notion-cli
+          path: ${{ env.HOMEBREW_TAP_PATH }}
           commit-message: "chore: bump ns formula to ${{ github.event.release.tag_name }}"
           branch: "chore/bump-ns-${{ github.event.release.tag_name }}"
           title: "chore: bump ns to ${{ github.event.release.tag_name }}"

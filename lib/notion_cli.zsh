@@ -12,6 +12,172 @@ source "$this_dir/migrations.zsh"
 NOTION_PROPERTIES_HEADER="<!-- notion-properties"
 NOTION_PROPERTIES_FOOTER="-->"
 
+notion_current_epoch() {
+  date +%s
+}
+
+notion_file_mtime_epoch() {
+  local file_path="$1"
+  python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$file_path"
+}
+
+notion_watch_snapshot() {
+  local notes_root="$1"
+  local config_dir_name="$2"
+
+  python3 - "$notes_root" "$config_dir_name" <<'PYEOF'
+import os
+import sys
+
+notes_root = os.path.realpath(sys.argv[1])
+config_dir_name = sys.argv[2]
+
+for root, dirs, files in os.walk(notes_root):
+    dirs[:] = sorted(d for d in dirs if d != config_dir_name)
+    for name in sorted(files):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(root, name)
+        rel = os.path.relpath(path, notes_root)
+        print(f"{rel}\t{int(os.path.getmtime(path))}")
+PYEOF
+}
+
+notion_watch_process_file_change() {
+  local config_path="$1"
+  local notes_root="$2"
+  local relative_path="$3"
+  local cooldown_seconds="$4"
+
+  local now_epoch last_upload_epoch remaining abs_file
+  now_epoch="$(notion_current_epoch)"
+  last_upload_epoch="$(notion_config_get_last_upload_epoch "$config_path" "$relative_path")"
+  if [[ -n "$last_upload_epoch" && "$last_upload_epoch" -gt 0 ]]; then
+    remaining=$((cooldown_seconds - (now_epoch - last_upload_epoch)))
+    if [[ "$remaining" -gt 0 ]]; then
+      notion_print_warn "Skipping '$relative_path'; cooldown active for ${remaining}s."
+      return 0
+    fi
+  fi
+
+  abs_file="$notes_root/$relative_path"
+  notion_print_info "Change detected: $relative_path"
+  if notion_cmd_upload "$abs_file"; then
+    notion_config_set_last_upload_epoch "$config_path" "$relative_path" "$now_epoch"
+    return 0
+  fi
+
+  return 1
+}
+
+notion_cmd_watch() {
+  local enable=""
+  local cooldown_seconds=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --help | -h)
+      notion_watch_usage
+      return 0
+      ;;
+    --enable)
+      enable="true"
+      shift
+      ;;
+    --disable)
+      enable="false"
+      shift
+      ;;
+    --cooldown-seconds)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        notion_print_error "--cooldown-seconds requires a value"
+        return 1
+      fi
+      if [[ ! "${2:-}" =~ ^[0-9]+$ ]]; then
+        notion_print_error "--cooldown-seconds must be a non-negative integer"
+        return 1
+      fi
+      cooldown_seconds="$2"
+      shift 2
+      ;;
+    *)
+      notion_print_error "unknown argument for watch: $1"
+      notion_watch_usage
+      return 1
+      ;;
+    esac
+  done
+
+  local config_path
+  config_path="$(notion_find_and_prepare_config)" || {
+    notion_print_error "No project config found. Run 'ns init' first."
+    return 1
+  }
+
+  local current_enabled current_cooldown
+  current_enabled="$(notion_config_get_watch_auto_upload_on_save "$config_path")"
+  current_cooldown="$(notion_config_get_watch_cooldown_seconds "$config_path")"
+
+  if [[ -n "$enable" || -n "$cooldown_seconds" ]]; then
+    notion_config_set_watch_settings \
+      "$config_path" \
+      "${enable:-$current_enabled}" \
+      "${cooldown_seconds:-$current_cooldown}"
+
+    current_enabled="$(notion_config_get_watch_auto_upload_on_save "$config_path")"
+    current_cooldown="$(notion_config_get_watch_cooldown_seconds "$config_path")"
+    notion_print_success "Updated watch settings: enabled=$current_enabled cooldown=${current_cooldown}s"
+    if [[ "$enable" == "false" ]]; then
+      return 0
+    fi
+  fi
+
+  if [[ "$current_enabled" != "true" ]]; then
+    notion_print_error "auto upload on save is disabled. Run 'ns watch --enable' to turn it on."
+    return 1
+  fi
+
+  notion_require_token >/dev/null || return 1
+
+  local notes_root poll_seconds max_loops loops snapshot_file
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  poll_seconds="${NS_WATCH_POLL_SECONDS:-2}"
+  max_loops="${NS_WATCH_MAX_LOOPS:-0}"
+  loops=0
+  snapshot_file="$(mktemp)"
+  notion_watch_snapshot "$notes_root" "$NS_CONFIG_DIR_NAME" >"$snapshot_file"
+
+  notion_print_info "Watching $notes_root for markdown changes"
+  notion_print_info "Cooldown: ${current_cooldown}s"
+
+  while true; do
+    local current_snapshot changed=0 line rel prev_mtime curr_mtime failures=0
+    current_snapshot="$(notion_watch_snapshot "$notes_root" "$NS_CONFIG_DIR_NAME")"
+
+    while IFS=$'\t' read -r rel curr_mtime; do
+      [[ -n "$rel" ]] || continue
+      prev_mtime="$(awk -F $'\t' -v rel="$rel" '$1 == rel { print $2; exit }' "$snapshot_file")"
+      if [[ -z "$prev_mtime" || "$curr_mtime" != "$prev_mtime" ]]; then
+        changed=1
+        notion_watch_process_file_change "$config_path" "$notes_root" "$rel" "$current_cooldown" || failures=$((failures + 1))
+      fi
+    done <<< "$current_snapshot"
+
+    printf '%s\n' "$current_snapshot" >"$snapshot_file"
+    if [[ "$changed" -eq 1 && "$failures" -gt 0 ]]; then
+      notion_print_warn "Watch iteration completed with $failures upload failure(s)."
+    fi
+
+    loops=$((loops + 1))
+    if [[ "$max_loops" -gt 0 && "$loops" -ge "$max_loops" ]]; then
+      break
+    fi
+    sleep "$poll_seconds"
+  done
+
+  rm -f "$snapshot_file"
+}
+
 notion_cmd_init() {
   local database_id=""
   local notes_root=""
@@ -1404,6 +1570,9 @@ notion_main() {
   upload-sync)
     notion_cmd_upload_all "$@"
     ;;
+  watch)
+    notion_cmd_watch "$@"
+    ;;
   download)
     notion_cmd_download "$@"
     ;;
@@ -1533,7 +1702,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync download delete download-all download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync watch download delete download-all download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1553,6 +1722,9 @@ _ns() {
       ;;
     upload-all|upload-sync|download-all|download-sync)
       COMPREPLY=( $(compgen -W "--dry-run --help" -- "$cur") )
+      ;;
+    watch)
+      COMPREPLY=( $(compgen -W "--enable --disable --cooldown-seconds --help" -- "$cur") )
       ;;
     completion)
       COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
@@ -1586,6 +1758,7 @@ _ns() {
         'upload[Upload markdown file]' \
         'upload-all[Upload all markdown files in current sync scope]' \
         'upload-sync[Upload all markdown files under current directory]' \
+        'watch[Watch notes_root and auto-upload changed markdown files]' \
         'download[Download markdown file]' \
         'delete[Delete markdown file locally and archive matching Notion page]' \
         'download-all[Download all Notion pages in current sync scope]' \
@@ -1606,6 +1779,9 @@ _ns() {
           ;;
         upload-all|upload-sync)
           _arguments '--dry-run[Show upload intent for each markdown file]' '--help[Show help]'
+          ;;
+        watch)
+          _arguments '--enable[Enable auto upload on save in project config]' '--disable[Disable auto upload on save in project config]' '--cooldown-seconds[Cooldown between uploads of the same file]:seconds:' '--help[Show help]'
           ;;
         download-all|download-sync)
           _arguments '--dry-run[Show download intent for each item in scope]' '--help[Show help]'
