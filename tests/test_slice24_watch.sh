@@ -36,10 +36,11 @@ mkdir -p "$notes_root/project"
 (cd "$notes_root" && "$CLI" link project rel_123 relation_prop >/dev/null)
 
 config_path="$notes_root/.ns-cli/config.json"
-[[ "$(jq -r '.watch.auto_upload_on_save' "$config_path")" == "false" ]] || fail "expected auto upload disabled by default"
-[[ "$(jq -r '.watch.cooldown_seconds' "$config_path")" == "60" ]] || fail "expected default cooldown of 60"
+[[ "$(jq -r '.watch.default_cooldown_seconds' "$config_path")" == "60" ]] || fail "expected default cooldown of 60"
+[[ "$(jq -r '.watch.files // {} | length' "$config_path")" == "0" ]] || fail "expected no watched files by default"
 
 printf 'alpha\n' > "$notes_root/project/watch-note.md"
+printf 'beta\n' > "$notes_root/project/ignored.md"
 
 bin_dir="$tmp_dir/bin"
 mkdir -p "$bin_dir"
@@ -78,36 +79,59 @@ export NOTION_TOKEN="test_token"
 export SLICE24_CURL_LOG="$tmp_dir/curl.log"
 
 set +e
+no_files_out="$(cd "$notes_root" && "$CLI" watch 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 1
+assert_contains "$no_files_out" "no files have watch enabled"
+
+set +e
+enable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --enable --cooldown-seconds 60 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$enable_out" "Updated watch settings for 'project/watch-note.md': enabled=true cooldown=60s"
+
+[[ "$(jq -r '.watch.files["project/watch-note.md"].enabled' "$config_path")" == "true" ]] || fail "expected watched file enabled"
+[[ "$(jq -r '.watch.files["project/watch-note.md"].cooldown_seconds' "$config_path")" == "60" ]] || fail "expected watched file cooldown"
+
+set +e
 watch_out="$(
   cd "$notes_root"
-  NS_WATCH_POLL_SECONDS=1 NS_WATCH_MAX_LOOPS=6 "$CLI" watch --enable --cooldown-seconds 60 >"$tmp_dir/watch.log" 2>&1 &
+  NS_WATCH_POLL_SECONDS=1 NS_WATCH_MAX_LOOPS=6 "$CLI" watch >"$tmp_dir/watch.log" 2>&1 &
   watch_pid=$!
   sleep 1.2
-  printf 'beta\n' >> "$notes_root/project/watch-note.md"
+  printf 'change1\n' >> "$notes_root/project/watch-note.md"
+  printf 'ignore1\n' >> "$notes_root/project/ignored.md"
   sleep 2.2
-  printf 'gamma\n' >> "$notes_root/project/watch-note.md"
+  printf 'change2\n' >> "$notes_root/project/watch-note.md"
+  printf 'ignore2\n' >> "$notes_root/project/ignored.md"
   wait "$watch_pid"
   cat "$tmp_dir/watch.log"
 )"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$watch_out" "Updated watch settings: enabled=true cooldown=60s"
+assert_contains "$watch_out" "Watching 1 enabled markdown file(s)"
 assert_contains "$watch_out" "Change detected: project/watch-note.md"
 assert_contains "$watch_out" "Uploaded 'watch-note' successfully."
 assert_contains "$watch_out" "Skipping 'project/watch-note.md'; cooldown active"
 
 query_count="$(grep -c -- "/v1/databases/db_test/query" "$SLICE24_CURL_LOG" || true)"
 [[ "$query_count" -eq 1 ]] || fail "expected 1 database query due to cooldown, got $query_count"
+if grep -q '"equals":"ignored"' "$SLICE24_CURL_LOG"; then
+  fail "did not expect ignored.md to be uploaded"
+fi
 
-[[ "$(jq -r '.watch.auto_upload_on_save' "$config_path")" == "true" ]] || fail "expected auto upload enabled in config"
-[[ "$(jq -r '.sync_state.uploads["project/watch-note.md"].last_uploaded_at // 0' "$config_path")" -gt 0 ]] || fail "expected last upload time recorded"
+[[ "$(jq -r '.watch.files["project/watch-note.md"].last_uploaded_at // 0' "$config_path")" -gt 0 ]] || fail "expected last upload time recorded"
 
 set +e
-disable_out="$(cd "$notes_root" && "$CLI" watch --disable 2>&1)"
+disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"
 code=$?
 set -e
 assert_exit_code "$code" 0
-assert_contains "$disable_out" "Updated watch settings: enabled=false cooldown=60s"
+assert_contains "$disable_out" "Updated watch settings for 'project/watch-note.md': enabled=false cooldown=60s"
 
-echo "PASS: slice 24 watch cooldown"
+[[ "$(jq -r '.watch.files["project/watch-note.md"].enabled' "$config_path")" == "false" ]] || fail "expected watched file disabled"
+
+echo "PASS: slice 24 per-file watch cooldown"

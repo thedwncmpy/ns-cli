@@ -55,7 +55,7 @@ notion_upload_sync_usage() {
 }
 
 notion_watch_usage() {
-  notion_print_usage "Usage: ns watch [--enable|--disable] [--cooldown-seconds <n>]"
+  notion_print_usage "Usage: ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]"
 }
 
 # Prints download command usage.

@@ -22,11 +22,8 @@ notion_write_config() {
   "title_property": "$title_escaped",
   "mappings": {},
   "watch": {
-    "auto_upload_on_save": false,
-    "cooldown_seconds": 60
-  },
-  "sync_state": {
-    "uploads": {}
+    "default_cooldown_seconds": 60,
+    "files": {}
   }
 }
 JSON
@@ -106,31 +103,58 @@ notion_config_get_mapping_relation_property() {
   jq -r --arg seg "$segment" '.mappings[$seg].relation_property // "notebook"' "$config_path"
 }
 
-notion_config_get_watch_auto_upload_on_save() {
+notion_config_get_watch_default_cooldown_seconds() {
   local config_path="$1"
-  jq -r '.watch.auto_upload_on_save // false' "$config_path"
+  jq -r '.watch.default_cooldown_seconds // .watch.cooldown_seconds // 60' "$config_path"
 }
 
-notion_config_get_watch_cooldown_seconds() {
+notion_config_get_watch_file_enabled() {
   local config_path="$1"
-  jq -r '.watch.cooldown_seconds // 60' "$config_path"
+  local relative_path="$2"
+  jq -r --arg rel "$relative_path" '.watch.files[$rel].enabled // false' "$config_path"
 }
 
-notion_config_set_watch_settings() {
+notion_config_get_watch_file_cooldown_seconds() {
   local config_path="$1"
-  local auto_upload_on_save="$2"
-  local cooldown_seconds="$3"
+  local relative_path="$2"
+  jq -r --arg rel "$relative_path" '.watch.files[$rel].cooldown_seconds // .watch.default_cooldown_seconds // .watch.cooldown_seconds // 60' "$config_path"
+}
+
+notion_config_set_watch_default_cooldown_seconds() {
+  local config_path="$1"
+  local cooldown_seconds="$2"
   local tmp_cfg
 
   tmp_cfg="$(mktemp)"
   jq \
-    --argjson enabled "$auto_upload_on_save" \
     --argjson cooldown "$cooldown_seconds" \
     '
       .watch = ((.watch // {}) + {
-        auto_upload_on_save: $enabled,
-        cooldown_seconds: $cooldown
+        default_cooldown_seconds: $cooldown
       })
+    ' "$config_path" >"$tmp_cfg"
+  mv "$tmp_cfg" "$config_path"
+}
+
+notion_config_set_watch_file_settings() {
+  local config_path="$1"
+  local relative_path="$2"
+  local enabled="$3"
+  local cooldown_seconds="$4"
+  local tmp_cfg
+
+  tmp_cfg="$(mktemp)"
+  jq \
+    --arg rel "$relative_path" \
+    --argjson enabled "$enabled" \
+    --argjson cooldown "$cooldown_seconds" \
+    '
+      .watch = (.watch // {})
+      | .watch.files = (.watch.files // {})
+      | .watch.files[$rel] = ((.watch.files[$rel] // {}) + {
+          enabled: $enabled,
+          cooldown_seconds: $cooldown
+        })
     ' "$config_path" >"$tmp_cfg"
   mv "$tmp_cfg" "$config_path"
 }
@@ -138,7 +162,7 @@ notion_config_set_watch_settings() {
 notion_config_get_last_upload_epoch() {
   local config_path="$1"
   local relative_path="$2"
-  jq -r --arg rel "$relative_path" '.sync_state.uploads[$rel].last_uploaded_at // 0' "$config_path"
+  jq -r --arg rel "$relative_path" '.watch.files[$rel].last_uploaded_at // 0' "$config_path"
 }
 
 notion_config_set_last_upload_epoch() {
@@ -152,9 +176,14 @@ notion_config_set_last_upload_epoch() {
     --arg rel "$relative_path" \
     --argjson epoch "$epoch" \
     '
-      .sync_state = (.sync_state // {})
-      | .sync_state.uploads = (.sync_state.uploads // {})
-      | .sync_state.uploads[$rel] = { last_uploaded_at: $epoch }
+      .watch = (.watch // {})
+      | .watch.files = (.watch.files // {})
+      | .watch.files[$rel] = ((.watch.files[$rel] // {}) + {last_uploaded_at: $epoch})
     ' "$config_path" >"$tmp_cfg"
   mv "$tmp_cfg" "$config_path"
+}
+
+notion_config_get_enabled_watch_files() {
+  local config_path="$1"
+  jq -r '.watch.files // {} | to_entries | map(select(.value.enabled == true) | .key) | .[]?' "$config_path"
 }

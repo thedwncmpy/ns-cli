@@ -83,7 +83,7 @@ ns status [<file.md>]
 ns upload [--dry-run] <file.md>
 ns upload-all [--dry-run]
 ns upload-sync [--dry-run]
-ns watch [--enable|--disable] [--cooldown-seconds <n>]
+ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]
 ns download [--dry-run] <file.md>
 ns delete [--dry-run] <file.md>
 ns download-all [--dry-run]
@@ -139,10 +139,11 @@ cd ./notes/project
 ns upload-all
 ```
 
-Or enable watch mode with a one-minute per-file cooldown:
+Or enable watch mode for one note with a one-minute cooldown:
 
 ```bash
-ns watch --enable --cooldown-seconds 60
+ns watch ./notes/project/today.md --enable --cooldown-seconds 60
+ns watch
 ```
 
 6. Inspect resolved sync behavior for one note:
@@ -191,11 +192,14 @@ Example `.notion-cli/config.json`:
     }
   },
   "watch": {
-    "auto_upload_on_save": false,
-    "cooldown_seconds": 60
-  },
-  "sync_state": {
-    "uploads": {}
+    "default_cooldown_seconds": 60,
+    "files": {
+      "project/today.md": {
+        "enabled": true,
+        "cooldown_seconds": 60,
+        "last_uploaded_at": 1781899705
+      }
+    }
   }
 }
 ```
@@ -223,8 +227,9 @@ In legacy mode, relation property defaults to `notebook`.
 ## Current Behavior Notes
 
 - `upload-all` and `upload-sync` currently behave the same: both upload Markdown files under the current directory recursively.
-- `watch` polls `notes_root` for changed Markdown files and reuses `ns upload` for each changed file.
-- `watch` records per-file `last_uploaded_at` timestamps in config and skips re-uploading the same file until the configured cooldown expires.
+- `watch <file.md> --enable` opt-ins one file at a time.
+- Bare `watch` polls `notes_root`, but only reacts to files explicitly enabled in config.
+- `watch` records per-file `last_uploaded_at` timestamps and skips re-uploading the same file until that file's cooldown expires.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
 - Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.

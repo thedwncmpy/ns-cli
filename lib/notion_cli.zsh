@@ -23,33 +23,25 @@ notion_file_mtime_epoch() {
 
 notion_watch_snapshot() {
   local notes_root="$1"
-  local config_dir_name="$2"
+  local enabled_files_raw="$2"
+  local rel abs_path mtime
 
-  python3 - "$notes_root" "$config_dir_name" <<'PYEOF'
-import os
-import sys
-
-notes_root = os.path.realpath(sys.argv[1])
-config_dir_name = sys.argv[2]
-
-for root, dirs, files in os.walk(notes_root):
-    dirs[:] = sorted(d for d in dirs if d != config_dir_name)
-    for name in sorted(files):
-        if not name.endswith(".md"):
-            continue
-        path = os.path.join(root, name)
-        rel = os.path.relpath(path, notes_root)
-        print(f"{rel}\t{int(os.path.getmtime(path))}")
-PYEOF
+  while IFS= read -r rel; do
+    [[ -n "$rel" ]] || continue
+    abs_path="$notes_root/$rel"
+    [[ -f "$abs_path" ]] || continue
+    mtime="$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$abs_path")" || continue
+    printf '%s\t%s\n' "$rel" "$mtime"
+  done <<< "$enabled_files_raw"
 }
 
 notion_watch_process_file_change() {
   local config_path="$1"
   local notes_root="$2"
   local relative_path="$3"
-  local cooldown_seconds="$4"
 
-  local now_epoch last_upload_epoch remaining abs_file
+  local now_epoch last_upload_epoch remaining abs_file cooldown_seconds
+  cooldown_seconds="$(notion_config_get_watch_file_cooldown_seconds "$config_path" "$relative_path")"
   now_epoch="$(notion_current_epoch)"
   last_upload_epoch="$(notion_config_get_last_upload_epoch "$config_path" "$relative_path")"
   if [[ -n "$last_upload_epoch" && "$last_upload_epoch" -gt 0 ]]; then
@@ -73,6 +65,7 @@ notion_watch_process_file_change() {
 notion_cmd_watch() {
   local enable=""
   local cooldown_seconds=""
+  local file_arg=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -101,12 +94,38 @@ notion_cmd_watch() {
       shift 2
       ;;
     *)
-      notion_print_error "unknown argument for watch: $1"
-      notion_watch_usage
-      return 1
+      if [[ -n "$file_arg" ]]; then
+        notion_print_error "watch accepts at most one <file.md>"
+        notion_watch_usage
+        return 1
+      fi
+      file_arg="$1"
+      shift
       ;;
     esac
   done
+
+  if [[ -z "$file_arg" && -n "$enable" ]]; then
+    notion_print_error "watch activation requires <file.md>"
+    notion_watch_usage
+    return 1
+  fi
+
+  if [[ -z "$file_arg" && -n "$cooldown_seconds" && -z "$enable" ]]; then
+    notion_print_error "watch cooldown updates require <file.md> or use the default config directly"
+    notion_watch_usage
+    return 1
+  fi
+
+  if [[ -n "$file_arg" && "$file_arg" != *.md ]]; then
+    notion_print_error "watch requires a <*.md>"
+    notion_watch_usage
+    return 1
+  fi
+
+  if [[ -n "$enable" && "$enable" == "false" && -n "$cooldown_seconds" ]]; then
+    notion_print_warn "Disabling watch for the file but preserving the configured cooldown."
+  fi
 
   local config_path
   config_path="$(notion_find_and_prepare_config)" || {
@@ -114,52 +133,74 @@ notion_cmd_watch() {
     return 1
   }
 
-  local current_enabled current_cooldown
-  current_enabled="$(notion_config_get_watch_auto_upload_on_save "$config_path")"
-  current_cooldown="$(notion_config_get_watch_cooldown_seconds "$config_path")"
+  local notes_root abs_notes_root
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  abs_notes_root="${notes_root:A}"
 
-  if [[ -n "$enable" || -n "$cooldown_seconds" ]]; then
-    notion_config_set_watch_settings \
-      "$config_path" \
-      "${enable:-$current_enabled}" \
-      "${cooldown_seconds:-$current_cooldown}"
+  if [[ -n "$file_arg" ]]; then
+    local abs_file relative_path current_enabled current_cooldown
+    abs_file="${file_arg:A}"
+    if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
+      notion_print_error "file must be inside notes_root: $abs_notes_root"
+      return 1
+    fi
+    relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
+      notion_print_error "file must be inside notes_root: $abs_notes_root"
+      return 1
+    }
 
-    current_enabled="$(notion_config_get_watch_auto_upload_on_save "$config_path")"
-    current_cooldown="$(notion_config_get_watch_cooldown_seconds "$config_path")"
-    notion_print_success "Updated watch settings: enabled=$current_enabled cooldown=${current_cooldown}s"
-    if [[ "$enable" == "false" ]]; then
+    current_enabled="$(notion_config_get_watch_file_enabled "$config_path" "$relative_path")"
+    current_cooldown="$(notion_config_get_watch_file_cooldown_seconds "$config_path" "$relative_path")"
+
+    if [[ -n "$enable" || -n "$cooldown_seconds" ]]; then
+      notion_config_set_watch_file_settings \
+        "$config_path" \
+        "$relative_path" \
+        "${enable:-$current_enabled}" \
+        "${cooldown_seconds:-$current_cooldown}"
+
+      current_enabled="$(notion_config_get_watch_file_enabled "$config_path" "$relative_path")"
+      current_cooldown="$(notion_config_get_watch_file_cooldown_seconds "$config_path" "$relative_path")"
+      notion_print_success "Updated watch settings for '$relative_path': enabled=$current_enabled cooldown=${current_cooldown}s"
       return 0
     fi
-  fi
-
-  if [[ "$current_enabled" != "true" ]]; then
-    notion_print_error "auto upload on save is disabled. Run 'ns watch --enable' to turn it on."
-    return 1
+  else
+    if [[ -n "$cooldown_seconds" ]]; then
+      notion_config_set_watch_default_cooldown_seconds "$config_path" "$cooldown_seconds"
+    fi
   fi
 
   notion_require_token >/dev/null || return 1
 
-  local notes_root poll_seconds max_loops loops snapshot_file
-  notes_root="$(notion_config_get_notes_root "$config_path")"
+  local enabled_files_raw
+  enabled_files_raw="$(notion_config_get_enabled_watch_files "$config_path")"
+  if [[ -z "$enabled_files_raw" ]]; then
+    notion_print_error "no files have watch enabled. Run 'ns watch <file.md> --enable' first."
+    return 1
+  fi
+
+  local poll_seconds max_loops loops snapshot_file
   poll_seconds="${NS_WATCH_POLL_SECONDS:-2}"
   max_loops="${NS_WATCH_MAX_LOOPS:-0}"
   loops=0
   snapshot_file="$(mktemp)"
-  notion_watch_snapshot "$notes_root" "$NS_CONFIG_DIR_NAME" >"$snapshot_file"
+  notion_watch_snapshot "$notes_root" "$enabled_files_raw" >"$snapshot_file"
 
-  notion_print_info "Watching $notes_root for markdown changes"
-  notion_print_info "Cooldown: ${current_cooldown}s"
+  local enabled_count
+  enabled_count="$(printf '%s\n' "$enabled_files_raw" | awk 'NF {count++} END {print count+0}')"
+  notion_print_info "Watching $enabled_count enabled markdown file(s) under $notes_root"
 
   while true; do
-    local current_snapshot changed=0 line rel prev_mtime curr_mtime failures=0
-    current_snapshot="$(notion_watch_snapshot "$notes_root" "$NS_CONFIG_DIR_NAME")"
+    local current_snapshot changed=0 rel prev_mtime curr_mtime failures=0
+    enabled_files_raw="$(notion_config_get_enabled_watch_files "$config_path")"
+    current_snapshot="$(notion_watch_snapshot "$notes_root" "$enabled_files_raw")"
 
     while IFS=$'\t' read -r rel curr_mtime; do
       [[ -n "$rel" ]] || continue
       prev_mtime="$(awk -F $'\t' -v rel="$rel" '$1 == rel { print $2; exit }' "$snapshot_file")"
       if [[ -z "$prev_mtime" || "$curr_mtime" != "$prev_mtime" ]]; then
         changed=1
-        notion_watch_process_file_change "$config_path" "$notes_root" "$rel" "$current_cooldown" || failures=$((failures + 1))
+        notion_watch_process_file_change "$config_path" "$notes_root" "$rel" || failures=$((failures + 1))
       fi
     done <<< "$current_snapshot"
 
@@ -1758,7 +1799,7 @@ _ns() {
         'upload[Upload markdown file]' \
         'upload-all[Upload all markdown files in current sync scope]' \
         'upload-sync[Upload all markdown files under current directory]' \
-        'watch[Watch notes_root and auto-upload changed markdown files]' \
+        'watch[Watch enabled markdown files and auto-upload on save]' \
         'download[Download markdown file]' \
         'delete[Delete markdown file locally and archive matching Notion page]' \
         'download-all[Download all Notion pages in current sync scope]' \
@@ -1781,7 +1822,7 @@ _ns() {
           _arguments '--dry-run[Show upload intent for each markdown file]' '--help[Show help]'
           ;;
         watch)
-          _arguments '--enable[Enable auto upload on save in project config]' '--disable[Disable auto upload on save in project config]' '--cooldown-seconds[Cooldown between uploads of the same file]:seconds:' '--help[Show help]'
+          _arguments '1:markdown file:_files -g "*.md"' '--enable[Enable auto upload on save for the specified file]' '--disable[Disable auto upload on save for the specified file]' '--cooldown-seconds[Cooldown between uploads of the same file]:seconds:' '--help[Show help]'
           ;;
         download-all|download-sync)
           _arguments '--dry-run[Show download intent for each item in scope]' '--help[Show help]'

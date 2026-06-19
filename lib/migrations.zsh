@@ -18,12 +18,30 @@ notion_config_migrate_in_place() {
     local tmp_cfg
     tmp_cfg="$(mktemp)"
     jq '
-      .watch = ((.watch // {}) + {
-        auto_upload_on_save: (.watch.auto_upload_on_save // false),
-        cooldown_seconds: (.watch.cooldown_seconds // 60)
-      })
-      | .sync_state = (.sync_state // {})
-      | .sync_state.uploads = (.sync_state.uploads // {})
+      .watch = (.watch // {})
+      | .watch.default_cooldown_seconds = (.watch.default_cooldown_seconds // .watch.cooldown_seconds // 60)
+      | .watch.files = (
+          if (.watch.files // null) != null then
+            .watch.files
+          elif (.sync_state.uploads // null) != null then
+            (.sync_state.uploads
+              | to_entries
+              | map({
+                  key: .key,
+                  value: {
+                    enabled: (.watch.auto_upload_on_save // false),
+                    cooldown_seconds: (.watch.cooldown_seconds // 60),
+                    last_uploaded_at: (.value.last_uploaded_at // 0)
+                  }
+                })
+              | from_entries)
+          else
+            {}
+          end
+        )
+      | del(.watch.auto_upload_on_save)
+      | del(.watch.cooldown_seconds)
+      | del(.sync_state)
     ' "$config_path" >"$tmp_cfg"
     mv "$tmp_cfg" "$config_path"
     return 0

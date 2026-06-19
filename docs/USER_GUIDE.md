@@ -97,11 +97,14 @@ Example `.ns-cli/config.json`:
     }
   },
   "watch": {
-    "auto_upload_on_save": false,
-    "cooldown_seconds": 60
-  },
-  "sync_state": {
-    "uploads": {}
+    "default_cooldown_seconds": 60,
+    "files": {
+      "project/today.md": {
+        "enabled": true,
+        "cooldown_seconds": 60,
+        "last_uploaded_at": 1781899705
+      }
+    }
   }
 }
 ```
@@ -211,22 +214,26 @@ Current implementation behavior matches `ns upload-all`: it uploads all Markdown
 ### `ns watch`
 
 ```bash
-ns watch [--enable|--disable] [--cooldown-seconds <n>]
+ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]
 ```
 
 Behavior:
 
-- Watches `notes_root` for changed `.md` files.
+- `ns watch <file.md> --enable` enables auto-upload for one Markdown file.
+- `ns watch <file.md> --disable` disables auto-upload for one Markdown file.
+- Bare `ns watch` runs the watcher loop.
+- The watcher scans `notes_root` for changed `.md` files but only uploads files that are explicitly enabled in config.
 - Reuses the existing `ns upload` flow for each changed file.
-- Stores `watch.auto_upload_on_save` and `watch.cooldown_seconds` in project config.
-- Stores per-file `sync_state.uploads[<relative-path>].last_uploaded_at` timestamps in project config.
+- Stores per-file state in `watch.files[<relative-path>]`.
+- Stores per-file `last_uploaded_at` timestamps in project config.
 - Skips re-uploading the same file until the cooldown window expires.
 
 Examples:
 
 ```bash
-ns watch --enable --cooldown-seconds 60
-ns watch --disable
+ns watch project/today.md --enable --cooldown-seconds 60
+ns watch
+ns watch project/today.md --disable
 ```
 
 ### `ns download`
