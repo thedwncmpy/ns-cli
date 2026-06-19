@@ -25,6 +25,11 @@ notion_file_mtime_epoch() {
   python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$file_path"
 }
 
+notion_file_mtime_token() {
+  local file_path="$1"
+  python3 -c 'import os,sys; s=os.stat(sys.argv[1]); print(f"{s.st_mtime_ns}:{s.st_size}")' "$file_path"
+}
+
 notion_sync_log_path() {
   local config_path="$1"
   local config_dir="${config_path:A:h}"
@@ -52,14 +57,14 @@ notion_append_sync_log_entry() {
 notion_watch_snapshot() {
   local notes_root="$1"
   local enabled_files_raw="$2"
-  local rel abs_path mtime
+  local rel abs_path mtime_token
 
   while IFS= read -r rel; do
     [[ -n "$rel" ]] || continue
     abs_path="$notes_root/$rel"
     [[ -f "$abs_path" ]] || continue
-    mtime="$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$abs_path")" || continue
-    printf '%s\t%s\n' "$rel" "$mtime"
+    mtime_token="$(notion_file_mtime_token "$abs_path")" || continue
+    printf '%s\t%s\n' "$rel" "$mtime_token"
   done <<< "$enabled_files_raw"
 }
 

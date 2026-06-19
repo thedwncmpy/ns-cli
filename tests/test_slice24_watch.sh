@@ -133,6 +133,30 @@ if ! grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' "$sync_log"; then
   fail "expected sync log entries to start with an ISO-8601 timestamp"
 fi
 
+printf 'gamma\n' > "$notes_root/project/fast-save.md"
+set +e
+fast_enable_out="$(cd "$notes_root" && "$CLI" watch "project/fast-save.md" --enable --cooldown-seconds 0 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$fast_enable_out" "Updated watch settings for 'project/fast-save.md': enabled=true cooldown=0s"
+
+set +e
+fast_watch_out="$(
+  cd "$notes_root"
+  NS_WATCH_POLL_SECONDS=1 NS_WATCH_MAX_LOOPS=3 "$CLI" watch >"$tmp_dir/fast-watch.log" 2>&1 &
+  watch_pid=$!
+  sleep 0.2
+  printf 'delta\n' >> "$notes_root/project/fast-save.md"
+  wait "$watch_pid"
+  cat "$tmp_dir/fast-watch.log"
+)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$fast_watch_out" "Change detected: project/fast-save.md"
+assert_contains "$fast_watch_out" "Uploaded 'fast-save' successfully."
+
 set +e
 disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"
 code=$?
