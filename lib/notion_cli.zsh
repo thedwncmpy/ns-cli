@@ -16,9 +16,37 @@ notion_current_epoch() {
   date +%s
 }
 
+notion_current_timestamp_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
 notion_file_mtime_epoch() {
   local file_path="$1"
   python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$file_path"
+}
+
+notion_sync_log_path() {
+  local config_path="$1"
+  local config_dir="${config_path:A:h}"
+  echo "$config_dir/sync.log"
+}
+
+notion_append_sync_log_entry() {
+  local config_path="$1"
+  local notes_root="$2"
+  local action="$3"
+  local file_path="$4"
+
+  local relative_path timestamp log_path
+  relative_path="$(notion_relative_path_under_notes_root "$file_path" "$notes_root" 2>/dev/null || true)"
+  if [[ -z "$relative_path" ]]; then
+    relative_path="$file_path"
+  fi
+
+  timestamp="$(notion_current_timestamp_utc)"
+  log_path="$(notion_sync_log_path "$config_path")"
+  mkdir -p "${log_path%/*}"
+  printf '%s\t%s\t%s\n' "$timestamp" "$action" "$relative_path" >> "$log_path"
 }
 
 notion_watch_snapshot() {
@@ -482,6 +510,7 @@ notion_download_page_to_target() {
   local display_name="${${abs_target##*/}%.md}"
   notion_render_markdown_with_properties "$metadata_json" "$md_content" >"$abs_target"
   notion_write_metadata_sidecar "$config_path" "$notes_root" "$abs_target" "$metadata_json" || return 1
+  notion_append_sync_log_entry "$config_path" "$notes_root" "download" "$abs_target"
   notion_print_success "Downloaded '$display_name' to $abs_target"
 }
 
@@ -1109,6 +1138,7 @@ notion_cmd_upload() {
 
   rm -f "$tmp_blocks" "$tmp_content" "$tmp_props"
 
+  notion_append_sync_log_entry "$config_path" "$abs_notes_root" "upload" "$abs_file"
   notion_print_success "Uploaded '$title' successfully."
   return 0
 }
@@ -1371,6 +1401,7 @@ notion_cmd_delete() {
   rm -f "$abs_file"
   rm -f "$sidecar_path"
 
+  notion_append_sync_log_entry "$config_path" "$abs_notes_root" "delete" "$abs_file"
   notion_print_success "Deleted '$title' locally and archived the remote page."
   return 0
 }

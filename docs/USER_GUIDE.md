@@ -227,6 +227,7 @@ Behavior:
 - Stores per-file state in `watch.files[<relative-path>]`.
 - Stores per-file `last_uploaded_at` timestamps in project config.
 - Skips re-uploading the same file until the cooldown window expires.
+- Successful sync operations append a hidden audit line to `.ns-cli/sync.log`.
 
 Examples:
 

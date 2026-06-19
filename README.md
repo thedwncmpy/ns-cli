@@ -230,6 +230,7 @@ In legacy mode, relation property defaults to `notebook`.
 - `watch <file.md> --enable` opt-ins one file at a time.
 - Bare `watch` polls `notes_root`, but only reacts to files explicitly enabled in config.
 - `watch` records per-file `last_uploaded_at` timestamps and skips re-uploading the same file until that file's cooldown expires.
+- Successful upload, download, and delete operations append timestamped entries to `.ns-cli/sync.log`.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
 - Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.

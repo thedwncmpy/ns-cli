@@ -125,6 +125,14 @@ fi
 
 [[ "$(jq -r '.watch.files["project/watch-note.md"].last_uploaded_at // 0' "$config_path")" -gt 0 ]] || fail "expected last upload time recorded"
 
+sync_log="$notes_root/.ns-cli/sync.log"
+[[ -f "$sync_log" ]] || fail "expected sync log to be created"
+sync_log_out="$(cat "$sync_log")"
+assert_contains "$sync_log_out" $'\tupload\tproject/watch-note.md'
+if ! grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' "$sync_log"; then
+  fail "expected sync log entries to start with an ISO-8601 timestamp"
+fi
+
 set +e
 disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"
 code=$?
