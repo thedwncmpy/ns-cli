@@ -95,6 +95,56 @@ notion_watch_process_file_change() {
   return 1
 }
 
+notion_cmd_watch_upload() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_watch_upload_usage
+    return 0
+  fi
+
+  local file="${1:-}"
+  if [[ -z "$file" ]]; then
+    notion_print_error "watch-upload requires <file.md>"
+    notion_watch_upload_usage
+    return 1
+  fi
+
+  if [[ "$file" != *.md ]]; then
+    notion_print_error "watch-upload requires a <*.md>"
+    notion_watch_upload_usage
+    return 1
+  fi
+
+  local config_path
+  config_path="$(notion_find_and_prepare_config)" || {
+    notion_print_error "No project config found. Run 'ns init' first."
+    return 1
+  }
+
+  local notes_root abs_notes_root abs_file relative_path enabled
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  abs_notes_root="${notes_root:A}"
+  abs_file="${file:A}"
+
+  if ! notion_ensure_path_inside_notes_root "$abs_file" "$abs_notes_root"; then
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
+    return 1
+  fi
+
+  relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
+    return 1
+  }
+
+  enabled="$(notion_config_get_watch_file_enabled "$config_path" "$relative_path")"
+  if [[ "$enabled" != "true" ]]; then
+    notion_print_info "Watch disabled for '$relative_path'; skipping upload."
+    return 0
+  fi
+
+  notion_require_token >/dev/null || return 1
+  notion_watch_process_file_change "$config_path" "$abs_notes_root" "$relative_path"
+}
+
 notion_cmd_watch() {
   local enable=""
   local cooldown_seconds=""
@@ -1650,6 +1700,9 @@ notion_main() {
   watch)
     notion_cmd_watch "$@"
     ;;
+  watch-upload)
+    notion_cmd_watch_upload "$@"
+    ;;
   download)
     notion_cmd_download "$@"
     ;;
@@ -1779,7 +1832,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync watch download delete download-all download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync watch watch-upload download delete download-all download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1794,7 +1847,7 @@ _ns() {
         COMPREPLY=( $(compgen -W "--force --help" -- "$cur") )
       fi
       ;;
-    status|upload|download|delete)
+    status|upload|watch-upload|download|delete)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
       ;;
     upload-all|upload-sync|download-all|download-sync)
@@ -1836,6 +1889,7 @@ _ns() {
         'upload-all[Upload all markdown files in current sync scope]' \
         'upload-sync[Upload all markdown files under current directory]' \
         'watch[Watch enabled markdown files and auto-upload on save]' \
+        'watch-upload[Upload one markdown file if watch is enabled for it]' \
         'download[Download markdown file]' \
         'delete[Delete markdown file locally and archive matching Notion page]' \
         'download-all[Download all Notion pages in current sync scope]' \
@@ -1851,7 +1905,7 @@ _ns() {
         link)
           _arguments '1:subdir:_files -/' '2:relation page id:' '3:relation property:' '--force[Overwrite existing mapping]'
           ;;
-        status|upload|download|delete)
+        status|upload|watch-upload|download|delete)
           _arguments '1:markdown file:_files -g "*.md"'
           ;;
         upload-all|upload-sync)

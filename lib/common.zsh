@@ -17,6 +17,7 @@ notion_usage() {
   notion_print_usage "  upload-all Upload all markdown files in the current sync scope"
   notion_print_usage "  upload-sync Upload all markdown files under current directory"
   notion_print_usage "  watch      Watch notes_root and auto-upload changed markdown files"
+  notion_print_usage "  watch-upload Upload one markdown file if watch is enabled for it"
   notion_print_usage "  download   Download a markdown file from Notion"
   notion_print_usage "  delete     Delete a markdown file locally and archive the matching Notion page"
   notion_print_usage "  download-all Download all Notion pages in the current sync scope"
@@ -56,6 +57,10 @@ notion_upload_sync_usage() {
 
 notion_watch_usage() {
   notion_print_usage "Usage: ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]"
+}
+
+notion_watch_upload_usage() {
+  notion_print_usage "Usage: ns watch-upload <file.md>"
 }
 
 # Prints download command usage.

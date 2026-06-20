@@ -96,6 +96,13 @@ assert_contains "$enable_out" "Updated watch settings for 'project/watch-note.md
 [[ "$(jq -r '.watch.files["project/watch-note.md"].cooldown_seconds' "$config_path")" == "60" ]] || fail "expected watched file cooldown"
 
 set +e
+watch_upload_disabled_out="$(cd "$notes_root" && "$CLI" watch-upload "project/ignored.md" 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$watch_upload_disabled_out" "Watch disabled for 'project/ignored.md'; skipping upload."
+
+set +e
 watch_out="$(
   cd "$notes_root"
   NS_WATCH_POLL_SECONDS=1 NS_WATCH_MAX_LOOPS=6 "$CLI" watch >"$tmp_dir/watch.log" 2>&1 &
@@ -156,6 +163,14 @@ set -e
 assert_exit_code "$code" 0
 assert_contains "$fast_watch_out" "Change detected: project/fast-save.md"
 assert_contains "$fast_watch_out" "Uploaded 'fast-save' successfully."
+
+set +e
+watch_upload_out="$(cd "$notes_root" && "$CLI" watch-upload "project/fast-save.md" 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$watch_upload_out" "Change detected: project/fast-save.md"
+assert_contains "$watch_upload_out" "Uploaded 'fast-save' successfully."
 
 set +e
 disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"

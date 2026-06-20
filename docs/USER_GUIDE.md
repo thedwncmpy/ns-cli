@@ -237,6 +237,24 @@ ns watch
 ns watch project/today.md --disable
 ```
 
+### `ns watch-upload`
+
+```bash
+ns watch-upload <file.md>
+```
+
+Behavior:
+
+- Uploads one Markdown file only if that file has watch enabled in config.
+- Reuses the same cooldown and `last_uploaded_at` behavior as `ns watch`.
+- Intended for editor save hooks such as Neovim `BufWritePost`.
+
+Examples:
+
+```bash
+ns watch-upload project/today.md
+```
+
 ### `ns download`
 
 ```bash
