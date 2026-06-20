@@ -248,11 +248,23 @@ Behavior:
 - Uploads one Markdown file only if that file has watch enabled in config.
 - Reuses the same cooldown and `last_uploaded_at` behavior as `ns watch`.
 - Intended for editor save hooks such as Neovim `BufWritePost`.
+- Resolves the matching `ns` project from the saved file path, so it does not depend on the editor's current working directory.
 
 Examples:
 
 ```bash
 ns watch-upload project/today.md
+```
+
+Neovim example:
+
+```lua
+vim.api.nvim_create_autocmd("BufWritePost", {
+  pattern = "*.md",
+  callback = function(args)
+    vim.fn.jobstart({ "ns", "watch-upload", args.file }, { detach = true })
+  end,
+})
 ```
 
 ### `ns download`

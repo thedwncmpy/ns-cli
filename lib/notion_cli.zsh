@@ -114,8 +114,9 @@ notion_cmd_watch_upload() {
     return 1
   fi
 
-  local config_path
-  config_path="$(notion_find_and_prepare_config)" || {
+  local file_dir config_path
+  file_dir="${file:A:h}"
+  config_path="$(notion_find_and_prepare_config "$file_dir")" || {
     notion_print_error "No project config found. Run 'ns init' first."
     return 1
   }
@@ -1024,7 +1025,7 @@ notion_cmd_upload() {
 
   # 3) Locate config via find_config; read notes_root + mappings.
   local config_path
-  config_path="$(notion_find_and_prepare_config)" || {
+  config_path="$(notion_find_and_prepare_config "${abs_file:h}")" || {
     notion_print_error "No project config found. Run 'ns init' first."
     return 1
   }

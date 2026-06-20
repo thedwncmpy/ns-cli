@@ -173,6 +173,14 @@ assert_contains "$watch_upload_out" "Change detected: project/fast-save.md"
 assert_contains "$watch_upload_out" "Uploaded 'fast-save' successfully."
 
 set +e
+watch_upload_external_cwd_out="$(cd "$tmp_dir" && "$CLI" watch-upload "$notes_root/project/fast-save.md" 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$watch_upload_external_cwd_out" "Change detected: project/fast-save.md"
+assert_contains "$watch_upload_external_cwd_out" "Uploaded 'fast-save' successfully."
+
+set +e
 disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"
 code=$?
 set -e

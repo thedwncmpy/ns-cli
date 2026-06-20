@@ -66,6 +66,21 @@ find_config() {
   return 1
 }
 
+# Finds $NS_CONFIG_DIR_NAME/config.json by walking up from a starting directory.
+# Example: config_path="$(find_config_from_dir "/abs/path")"
+find_config_from_dir() {
+  local start_dir="$1"
+  local current_dir="${start_dir:A}"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/$NS_CONFIG_DIR_NAME/config.json" ]]; then
+      echo "$current_dir/$NS_CONFIG_DIR_NAME/config.json"
+      return 0
+    fi
+    current_dir="$(dirname "$current_dir")"
+  done
+  return 1
+}
+
 # Reads notes_root from config.
 # Example: notes_root="$(notion_config_get_notes_root "$config_path")"
 notion_config_get_notes_root() {

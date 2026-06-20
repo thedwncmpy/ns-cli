@@ -55,8 +55,13 @@ notion_config_migrate_in_place() {
 # Finds config from current directory context and runs migration/validation hook.
 # Example: config_path="$(notion_find_and_prepare_config)"
 notion_find_and_prepare_config() {
+  local start_dir="${1:-}"
   local config_path
-  config_path="$(find_config)" || return 1
+  if [[ -n "$start_dir" ]]; then
+    config_path="$(find_config_from_dir "$start_dir")" || return 1
+  else
+    config_path="$(find_config)" || return 1
+  fi
   notion_config_migrate_in_place "$config_path" || return 1
   echo "$config_path"
 }

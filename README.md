@@ -231,7 +231,7 @@ In legacy mode, relation property defaults to `notebook`.
 - `upload-all` and `upload-sync` currently behave the same: both upload Markdown files under the current directory recursively.
 - `watch <file.md> --enable` opt-ins one file at a time.
 - Bare `watch` polls `notes_root`, but only reacts to files explicitly enabled in config.
-- `watch-upload <file.md>` is a one-shot upload intended for editor save hooks; it only uploads files that are watch-enabled.
+- `watch-upload <file.md>` is a one-shot upload intended for editor save hooks; it resolves the project from the file path and only uploads files that are watch-enabled.
 - `watch` records per-file `last_uploaded_at` timestamps and skips re-uploading the same file until that file's cooldown expires.
 - Successful upload, download, and delete operations append timestamped entries to `.ns-cli/sync.log`.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
