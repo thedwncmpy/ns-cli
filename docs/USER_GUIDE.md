@@ -262,10 +262,33 @@ Neovim example:
 vim.api.nvim_create_autocmd("BufWritePost", {
   pattern = "*.md",
   callback = function(args)
-    vim.fn.jobstart({ "ns", "watch-upload", args.file }, { detach = true })
+    vim.fn.jobstart({ "ns", "watch-upload", args.file }, {
+      stdout_buffered = true,
+      stderr_buffered = true,
+      on_stdout = function(_, data)
+        for _, line in ipairs(data or {}) do
+          if line ~= "" then
+            vim.schedule(function()
+              vim.api.nvim_echo({ { line, "None" } }, false, {})
+            end)
+          end
+        end
+      end,
+      on_stderr = function(_, data)
+        for _, line in ipairs(data or {}) do
+          if line ~= "" then
+            vim.schedule(function()
+              vim.api.nvim_echo({ { line, "WarningMsg" } }, false, {})
+            end)
+          end
+        end
+      end,
+    })
   end,
 })
 ```
+
+This prints `watch-upload` output in Neovim's command/message area instead of detaching the process and discarding the status lines.
 
 ### `ns download`
 

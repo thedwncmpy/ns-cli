@@ -62,6 +62,10 @@ set -euo pipefail
 args="$*"
 printf "%s\n" "$args" >> "${SLICE24_CURL_LOG:?}"
 
+if [[ "$args" == *"-X PATCH"*"/v1/blocks/page_new/children"* ]] && [[ "${SLICE24_SLOW_APPEND:-0}" == "1" ]]; then
+  sleep 1
+fi
+
 if [[ "$args" == *"-X POST"*"/v1/databases/"*"/query"* ]]; then
   printf '{"results":[],"has_more":false}'
 elif [[ "$args" == *"-X POST"*"/v1/pages"* ]]; then
@@ -179,6 +183,34 @@ set -e
 assert_exit_code "$code" 0
 assert_contains "$watch_upload_external_cwd_out" "Change detected: project/fast-save.md"
 assert_contains "$watch_upload_external_cwd_out" "Uploaded 'fast-save' successfully."
+
+printf 'concurrent\n' > "$notes_root/project/concurrent.md"
+set +e
+concurrent_enable_out="$(cd "$notes_root" && "$CLI" watch "project/concurrent.md" --enable --cooldown-seconds 0 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$concurrent_enable_out" "Updated watch settings for 'project/concurrent.md': enabled=true cooldown=0s"
+
+set +e
+concurrent_watch_upload_out="$(
+  cd "$notes_root"
+  export SLICE24_SLOW_APPEND=1
+  "$CLI" watch-upload "project/concurrent.md" >"$tmp_dir/concurrent-1.log" 2>&1 &
+  pid1=$!
+  sleep 0.2
+  "$CLI" watch-upload "project/concurrent.md" >"$tmp_dir/concurrent-2.log" 2>&1 &
+  pid2=$!
+  wait "$pid1"
+  wait "$pid2"
+  cat "$tmp_dir/concurrent-1.log"
+  cat "$tmp_dir/concurrent-2.log"
+)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$concurrent_watch_upload_out" "Uploaded 'concurrent' successfully."
+assert_contains "$concurrent_watch_upload_out" "Skipping 'project/concurrent.md'; sync already in progress."
 
 set +e
 disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"
