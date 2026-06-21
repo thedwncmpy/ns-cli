@@ -16,8 +16,8 @@ notion_current_epoch() {
   date +%s
 }
 
-notion_current_timestamp_utc() {
-  date -u +"%Y-%m-%dT%H:%M:%SZ"
+notion_current_timestamp_local() {
+  date +"%Y-%m-%dT%H:%M:%S%z"
 }
 
 notion_file_mtime_epoch() {
@@ -48,7 +48,7 @@ notion_append_sync_log_entry() {
     relative_path="$file_path"
   fi
 
-  timestamp="$(notion_current_timestamp_utc)"
+  timestamp="$(notion_current_timestamp_local)"
   log_path="$(notion_sync_log_path "$config_path")"
   mkdir -p "${log_path%/*}"
   printf '%s\t%s\t%s\n' "$timestamp" "$action" "$relative_path" >> "$log_path"
@@ -1532,7 +1532,7 @@ notion_cmd_download_all() {
   return 0
 }
 
-notion_cmd_upload_all() {
+notion_cmd_upload_sync() {
   local dry_run=0
   if [[ "${1:-}" == "--dry-run" ]]; then
     dry_run=1
@@ -1577,20 +1577,6 @@ notion_cmd_upload_all() {
 
   notion_print_success "Processed ${#files[@]} markdown file(s)."
   return 0
-}
-
-notion_cmd_upload_database_scope() {
-  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    notion_upload_all_usage
-    return 0
-  fi
-  if [[ $# -gt 0 && "${1:-}" != "--dry-run" ]]; then
-    notion_print_error "upload-all does not accept file arguments"
-    notion_upload_all_usage
-    return 1
-  fi
-
-  notion_cmd_upload_all "$@"
 }
 
 notion_cmd_download_database_scope() {
@@ -1715,11 +1701,8 @@ notion_main() {
   upload)
     notion_cmd_upload "$@"
     ;;
-  upload-all)
-    notion_cmd_upload_database_scope "$@"
-    ;;
   upload-sync)
-    notion_cmd_upload_all "$@"
+    notion_cmd_upload_sync "$@"
     ;;
   watch)
     notion_cmd_watch "$@"
@@ -1856,7 +1839,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-all upload-sync watch watch-upload download delete download-all download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-sync watch watch-upload download delete download-all download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1874,7 +1857,7 @@ _ns() {
     status|upload|watch-upload|download|delete)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
       ;;
-    upload-all|upload-sync|download-all|download-sync)
+    upload-sync|download-all|download-sync)
       COMPREPLY=( $(compgen -W "--dry-run --help" -- "$cur") )
       ;;
     watch)
@@ -1907,10 +1890,9 @@ _ns() {
       _values 'ns commands' \
         'help[Show help]' \
         'init[Initialize config]' \
-        'link[Map directory to relation]' \
+        'link[Map directory to relation or property]' \
         'status[Show resolved sync intent]' \
         'upload[Upload markdown file]' \
-        'upload-all[Upload all markdown files in current sync scope]' \
         'upload-sync[Upload all markdown files under current directory]' \
         'watch[Watch enabled markdown files and auto-upload on save]' \
         'watch-upload[Upload one markdown file if watch is enabled for it]' \
@@ -1932,7 +1914,7 @@ _ns() {
         status|upload|watch-upload|download|delete)
           _arguments '1:markdown file:_files -g "*.md"'
           ;;
-        upload-all|upload-sync)
+        upload-sync)
           _arguments '--dry-run[Show upload intent for each markdown file]' '--help[Show help]'
           ;;
         watch)

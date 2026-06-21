@@ -8,21 +8,20 @@ notion_usage() {
   notion_print_usage "Usage: ns <command> [options]"
   notion_print_usage ""
   notion_print_usage "Commands:"
-  notion_print_usage "  init       Initialize notion project config"
-  notion_print_usage "  link       Map a first-level subdirectory to a Notion relation page id"
-  notion_print_usage "  status     Show resolved sync intent for a markdown file"
-  notion_print_usage "  completion Print shell completion script"
-  notion_print_usage "  version    Show ns version"
-  notion_print_usage "  upload     Upload a markdown file to Notion"
-  notion_print_usage "  upload-all Upload all markdown files in the current sync scope"
-  notion_print_usage "  upload-sync Upload all markdown files under current directory"
-  notion_print_usage "  watch      Watch notes_root and auto-upload changed markdown files"
-  notion_print_usage "  watch-upload Upload one markdown file if watch is enabled for it"
-  notion_print_usage "  download   Download a markdown file from Notion"
-  notion_print_usage "  delete     Delete a markdown file locally and archive the matching Notion page"
-  notion_print_usage "  download-all Download all Notion pages in the current sync scope"
-  notion_print_usage "  download-sync Download all markdown files under current directory"
-  notion_print_usage "  help       Show this help"
+  notion_print_usage "  init         Create the ns-cli config for this folder"
+  notion_print_usage "  link         Connect a subfolder to a Notion relation (or property)"
+  notion_print_usage "  status       Show how one markdown file will sync to Notion"
+  notion_print_usage "  completion   Print the shell completion script"
+  notion_print_usage "  version      Show the installed ns version"
+  notion_print_usage "  upload       Upload one markdown file to Notion"
+  notion_print_usage "  upload-sync  Upload all markdown files under the current folder"
+  notion_print_usage "  watch        Watch for file changes and auto-upload saved markdown files"
+  notion_print_usage "  watch-upload Upload one file, but only if watch is enabled for it"
+  notion_print_usage "  download     Download one markdown file from Notion"
+  notion_print_usage "  delete       Delete one local markdown file and archive its Notion page"
+  notion_print_usage "  download-all Download all matching Notion pages into the project notes root"
+  notion_print_usage "  download-sync Download matching Notion pages into the current folder"
+  notion_print_usage "  help         Show this help"
 }
 
 notion_version_usage() {
@@ -45,10 +44,6 @@ notion_link_usage() {
 # Example: notion_upload_usage
 notion_upload_usage() {
   notion_print_usage "Usage: ns upload [--dry-run] <file.md>"
-}
-
-notion_upload_all_usage() {
-  notion_print_usage "Usage: ns upload-all [--dry-run]"
 }
 
 notion_upload_sync_usage() {

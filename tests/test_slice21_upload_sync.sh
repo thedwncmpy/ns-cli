@@ -110,4 +110,4 @@ set -e
 assert_exit_code "$code" 1
 assert_contains "$empty_out" "no markdown files found"
 
-echo "PASS: slice 21 upload-all"
+echo "PASS: slice 21 upload-sync"

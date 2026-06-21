@@ -34,7 +34,6 @@ set -e
 assert_exit_code "$code" 0
 assert_contains "$completion_out" "#compdef ns"
 assert_contains "$completion_out" "status|upload|watch-upload|download"
-assert_contains "$completion_out" "upload-all"
 assert_contains "$completion_out" "watch"
 assert_contains "$completion_out" "watch-upload"
 assert_contains "$completion_out" "download-all"

@@ -140,8 +140,8 @@ sync_log="$notes_root/.ns-cli/sync.log"
 [[ -f "$sync_log" ]] || fail "expected sync log to be created"
 sync_log_out="$(cat "$sync_log")"
 assert_contains "$sync_log_out" $'\tupload\tproject/watch-note.md'
-if ! grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' "$sync_log"; then
-  fail "expected sync log entries to start with an ISO-8601 timestamp"
+if ! grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}\t' "$sync_log"; then
+  fail "expected sync log entries to start with a local ISO-8601 timestamp including timezone offset"
 fi
 
 printf 'gamma\n' > "$notes_root/project/fast-save.md"

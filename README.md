@@ -101,7 +101,7 @@ Upload everything under the current scope:
 
 ```bash
 cd ~/todo
-ns upload-all
+ns upload-sync
 ```
 
 Download the same note back from Notion:
@@ -281,7 +281,6 @@ ns init --database-id <id> --notes-root <path> [--title-property <name>] [--forc
 ns link <subdir> <relation_page_id> <relation_property> [--force]
 ns status [<file.md>]
 ns upload [--dry-run] <file.md>
-ns upload-all [--dry-run]
 ns upload-sync [--dry-run]
 ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]
 ns watch-upload <file.md>
@@ -384,13 +383,12 @@ In legacy mode, relation property defaults to `notebook`.
 
 ## Current Behavior Notes
 
-- `upload-all` and `upload-sync` currently behave the same: both upload Markdown files under the current directory recursively.
 - `watch <file.md> --enable` opt-ins one file at a time.
 - `watch` and `watch-upload` only act on files explicitly enabled in config.
 - `watch-upload <file.md>` is a one-shot upload intended for editor save hooks and uses the same cooldown rules as `watch`.
 - Watch state is per file: each enabled file stores its own cooldown and `last_uploaded_at`.
 - Concurrent saves of the same file are deduplicated with a per-file lock under `.notion-cli/locks/`; one upload runs and overlapping attempts exit with `sync already in progress`.
-- Successful upload, download, and delete operations append timestamped entries to `.ns-cli/sync.log`.
+- Successful upload, download, and delete operations append timestamped entries to `.ns-cli/sync.log` using local time with timezone offset.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
 - Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.

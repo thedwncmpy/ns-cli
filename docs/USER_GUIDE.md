@@ -193,23 +193,13 @@ If multiple matches exist:
 
 `--dry-run` prints intent only.
 
-### `ns upload-all`
-
-```bash
-ns upload-all [--dry-run]
-```
-
-Uploads all Markdown files under the current directory recursively.
-
-This is effectively a batch wrapper around `ns upload`. It works on local files only, not on every page in the Notion database.
-
 ### `ns upload-sync`
 
 ```bash
 ns upload-sync [--dry-run]
 ```
 
-Current implementation behavior matches `ns upload-all`: it uploads all Markdown files under the current directory recursively.
+Uploads all Markdown files under the current directory recursively.
 
 ### `ns watch`
 
@@ -544,7 +534,6 @@ ns download-all
 
 ## Known Current Behaviors
 
-- `upload-all` and `upload-sync` currently behave the same.
 - `download-sync` works from local file discovery, not remote page discovery.
 - Uploading a matched page archives the old page and recreates it instead of patching blocks in place.
 - Markdown property blocks are parsed if present, but normal downloads currently store metadata in sidecar JSON instead of writing those blocks back into Markdown.
