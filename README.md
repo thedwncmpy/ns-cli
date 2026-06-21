@@ -148,6 +148,69 @@ ns watch
 ns watch-upload ./notes/project/today.md
 ```
 
+Neovim save hook example:
+
+```lua
+vim.api.nvim_create_autocmd("BufWritePost", {
+  pattern = "*.md",
+  callback = function(args)
+    vim.fn.jobstart({ "ns", "watch-upload", args.file }, {
+      stdout_buffered = true,
+      stderr_buffered = true,
+      on_stdout = function(_, data)
+        for _, line in ipairs(data or {}) do
+          if line ~= "" then
+            vim.schedule(function()
+              vim.api.nvim_echo({ { line, "None" } }, false, {})
+            end)
+          end
+        end
+      end,
+      on_stderr = function(_, data)
+        for _, line in ipairs(data or {}) do
+          if line ~= "" then
+            vim.schedule(function()
+              vim.api.nvim_echo({ { line, "WarningMsg" } }, false, {})
+            end)
+          end
+        end
+      end,
+    })
+  end,
+})
+```
+
+This keeps `watch-upload` attached so status lines and warnings show in Neovim instead of being discarded by a detached job.
+
+Example end-to-end setup for `./notes/todo/task1.md`:
+
+1. Enable watch for the file:
+
+```bash
+ns watch ./notes/todo/task1.md --enable --cooldown-seconds 60
+```
+
+2. Add the `BufWritePost` autocommand shown above to your Neovim config.
+
+3. Open `./notes/todo/task1.md` in Neovim and save it.
+
+4. On the first save, Neovim should show status lines from `ns watch-upload`, for example:
+
+```text
+Change detected: todo/task1.md
+Uploaded 'task1' successfully.
+```
+
+5. If you save again before the cooldown expires, Neovim should show a cooldown warning instead of uploading again.
+
+6. If two saves overlap closely enough to start two `watch-upload` runs for the same file, only one upload proceeds. The other exits with:
+
+```text
+Skipping 'todo/task1.md'; sync already in progress.
+```
+
+This lock is per file, not per directory, so `todo/task2.md` can still upload while `todo/task1.md` is in progress.
+
 6. Inspect resolved sync behavior for one note:
 
 ```bash
@@ -230,9 +293,10 @@ In legacy mode, relation property defaults to `notebook`.
 
 - `upload-all` and `upload-sync` currently behave the same: both upload Markdown files under the current directory recursively.
 - `watch <file.md> --enable` opt-ins one file at a time.
-- Bare `watch` polls `notes_root`, but only reacts to files explicitly enabled in config.
-- `watch-upload <file.md>` is a one-shot upload intended for editor save hooks; it resolves the project from the file path and only uploads files that are watch-enabled.
-- `watch` records per-file `last_uploaded_at` timestamps and skips re-uploading the same file until that file's cooldown expires.
+- `watch` and `watch-upload` only act on files explicitly enabled in config.
+- `watch-upload <file.md>` is a one-shot upload intended for editor save hooks and uses the same cooldown rules as `watch`.
+- Watch state is per file: each enabled file stores its own cooldown and `last_uploaded_at`.
+- Concurrent saves of the same file are deduplicated with a per-file lock under `.notion-cli/locks/`; one upload runs and overlapping attempts exit with `sync already in progress`.
 - Successful upload, download, and delete operations append timestamped entries to `.ns-cli/sync.log`.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
