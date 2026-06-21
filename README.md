@@ -1,6 +1,6 @@
 # ns-cli
 
-`notion-cli` is a lightweight command-line tool for strict sync between local Markdown files and a Notion database.
+`ns-cli` is a lightweight command-line tool for strict sync between local Markdown files and a Notion database.
 
 The CLI keeps sync behavior deterministic:
 - Exact filename-stem to Notion title matching
