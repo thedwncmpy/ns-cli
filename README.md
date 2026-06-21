@@ -392,7 +392,9 @@ In legacy mode, relation property defaults to `notebook`.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
 - Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.
-- `download-all` run from `notes_root` can place unmatched pages at the root when no directory mapping applies, and fails per page if multiple mappings fit.
+- `download-all` is scope-aware:
+- Run from `notes_root`, it queries the full database scope. Pages that match one mapping are written into that mapped subdirectory, unmatched pages are written at the root of `notes_root`, and pages matching multiple mappings fail for that page.
+- Run from a linked subdirectory under `notes_root`, it queries only the pages related to that subdirectory's mapping and writes them into that subdirectory.
 
 ## Shell Completion
 
