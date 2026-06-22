@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FORMULA="$ROOT_DIR/../homebrew-notion-cli/Formula/ns.rb"
+FORMULA="$ROOT_DIR/Formula/ns.rb"
 CLI="$ROOT_DIR/bin/ns"
 
 fail() {

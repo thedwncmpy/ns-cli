@@ -13,14 +13,13 @@ The CLI keeps sync behavior deterministic:
 <details>
 <summary>Homebrew</summary>
 
-From your Homebrew tap:
+From the source repo checkout:
 
 ```bash
-brew tap thedwncmpy/homebrew-notion-cli
-brew install thedwncmpy/homebrew-notion-cli/notion
+git clone https://github.com/thedwncmpy/ns-cli.git
+cd ns-cli
+brew install ./Formula/ns.rb
 ```
-
-If your tap repo is still typo-named, use `howebrew-notion-cli` instead.
 </details>
 
 <details>
