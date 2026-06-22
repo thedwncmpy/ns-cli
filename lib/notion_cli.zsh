@@ -79,6 +79,45 @@ notion_watch_lock_dir() {
   echo "$config_dir/locks/$lock_key.lock"
 }
 
+notion_watch_release_lock() {
+  local lock_dir="$1"
+  [[ -n "$lock_dir" ]] || return 0
+  rm -f "$lock_dir/pid" 2>/dev/null || true
+  rmdir "$lock_dir" 2>/dev/null || true
+}
+
+notion_watch_lock_owner_alive() {
+  local lock_dir="$1"
+  local owner_pid=""
+
+  [[ -f "$lock_dir/pid" ]] || return 1
+  owner_pid="$(<"$lock_dir/pid")"
+  [[ "$owner_pid" == <-> ]] || return 1
+  kill -0 "$owner_pid" 2>/dev/null
+}
+
+notion_watch_acquire_lock() {
+  local lock_dir="$1"
+  mkdir -p "${lock_dir%/*}"
+
+  if mkdir "$lock_dir" 2>/dev/null; then
+    printf '%s\n' "$$" > "$lock_dir/pid"
+    return 0
+  fi
+
+  if notion_watch_lock_owner_alive "$lock_dir"; then
+    return 1
+  fi
+
+  notion_watch_release_lock "$lock_dir"
+  if mkdir "$lock_dir" 2>/dev/null; then
+    printf '%s\n' "$$" > "$lock_dir/pid"
+    return 0
+  fi
+
+  return 1
+}
+
 notion_watch_process_file_change() {
   local config_path="$1"
   local notes_root="$2"
@@ -86,11 +125,11 @@ notion_watch_process_file_change() {
 
   local now_epoch last_upload_epoch remaining abs_file cooldown_seconds lock_dir
   lock_dir="$(notion_watch_lock_dir "$config_path" "$relative_path")"
-  mkdir -p "${lock_dir%/*}"
-  if ! mkdir "$lock_dir" 2>/dev/null; then
+  if ! notion_watch_acquire_lock "$lock_dir"; then
     notion_print_warn "Skipping '$relative_path'; sync already in progress."
     return 0
   fi
+  trap 'notion_watch_release_lock "$lock_dir"' EXIT INT TERM HUP
 
   local exit_code=1
 
@@ -102,7 +141,8 @@ notion_watch_process_file_change() {
     if [[ "$remaining" -gt 0 ]]; then
       notion_print_warn "Skipping '$relative_path'; cooldown active for ${remaining}s."
       exit_code=0
-      rmdir "$lock_dir" 2>/dev/null || true
+      notion_watch_release_lock "$lock_dir"
+      trap - EXIT INT TERM HUP
       return "$exit_code"
     fi
   fi
@@ -114,7 +154,8 @@ notion_watch_process_file_change() {
     exit_code=0
   fi
 
-  rmdir "$lock_dir" 2>/dev/null || true
+  notion_watch_release_lock "$lock_dir"
+  trap - EXIT INT TERM HUP
   return "$exit_code"
 }
 

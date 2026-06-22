@@ -212,6 +212,31 @@ assert_exit_code "$code" 0
 assert_contains "$concurrent_watch_upload_out" "Uploaded 'concurrent' successfully."
 assert_contains "$concurrent_watch_upload_out" "Skipping 'project/concurrent.md'; sync already in progress."
 
+printf 'stale\n' > "$notes_root/project/stale-lock.md"
+set +e
+stale_enable_out="$(cd "$notes_root" && "$CLI" watch "project/stale-lock.md" --enable --cooldown-seconds 0 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$stale_enable_out" "Updated watch settings for 'project/stale-lock.md': enabled=true cooldown=0s"
+
+set +e
+stale_recovery_out="$(
+  cd "$notes_root"
+  export SLICE24_SLOW_APPEND=1
+  "$CLI" watch-upload "project/stale-lock.md" >"$tmp_dir/stale-killed.log" 2>&1 &
+  stale_pid=$!
+  sleep 0.2
+  kill -TERM "$stale_pid"
+  wait "$stale_pid" || true
+  unset SLICE24_SLOW_APPEND
+  "$CLI" watch-upload "project/stale-lock.md" 2>&1
+)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$stale_recovery_out" "Uploaded 'stale-lock' successfully."
+
 set +e
 disable_out="$(cd "$notes_root" && "$CLI" watch "project/watch-note.md" --disable 2>&1)"
 code=$?
