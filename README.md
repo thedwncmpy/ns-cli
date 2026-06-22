@@ -13,11 +13,17 @@ The CLI keeps sync behavior deterministic:
 <details>
 <summary>Homebrew</summary>
 
-Install from the public tap:
+Install from the public tap `thedwncmpy/homebrew-ns`:
 
 ```bash
 brew tap thedwncmpy/homebrew-ns
 brew install ns
+```
+
+You can also install directly from the tapped formula in one command:
+
+```bash
+brew install thedwncmpy/homebrew-ns/ns
 ```
 
 Or install from the source repo checkout:
