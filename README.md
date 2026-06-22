@@ -13,7 +13,14 @@ The CLI keeps sync behavior deterministic:
 <details>
 <summary>Homebrew</summary>
 
-From the source repo checkout:
+Install from the public tap:
+
+```bash
+brew tap thedwncmpy/homebrew-ns
+brew install ns
+```
+
+Or install from the source repo checkout:
 
 ```bash
 git clone https://github.com/thedwncmpy/ns-cli.git
