@@ -37,6 +37,7 @@ assert_contains "$completion_out" "status|upload|watch-upload|download"
 assert_contains "$completion_out" "watch"
 assert_contains "$completion_out" "watch-upload"
 assert_contains "$completion_out" "download-all"
+assert_contains "$completion_out" "rename"
 assert_contains "$completion_out" "_files -g \"*.md\""
 assert_contains "$completion_out" "--title-property"
 

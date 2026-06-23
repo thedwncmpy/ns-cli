@@ -348,6 +348,43 @@ If multiple matches exist:
 
 `--dry-run` prints intent only.
 
+### `ns rename`
+
+```bash
+ns rename [--dry-run] <old-file.md> <new-file.md>
+```
+
+Behavior:
+
+- Both paths must end in `.md`.
+- Both paths must be inside `notes_root`.
+- The source file must exist.
+- The destination file must not already exist.
+- If either path is under a subdirectory, that first-level directory must be mapped.
+- Root-level source and destination paths are allowed without a mapping.
+
+Matching logic:
+
+- Source path under a mapped directory: query by exact old title plus exact relation membership.
+- Source path at the root: query by exact old title only.
+
+If a single match exists:
+
+- the local Markdown file is moved to the new path
+- the matching `.ns-cli/pages/...json` sidecar is moved to the new relative path if present
+- any `watch.files[<relative-path>]` state is moved to the new relative path
+- the remote page is patched with the new title and destination relation mapping
+
+If no match exists:
+
+- the command fails
+
+If multiple matches exist:
+
+- the command fails
+
+`--dry-run` prints intent only.
+
 ### `ns download-all`
 
 ```bash

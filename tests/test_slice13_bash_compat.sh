@@ -39,6 +39,7 @@ assert_contains "$bash_completion_out" "watch"
 assert_contains "$bash_completion_out" "watch-upload"
 assert_contains "$bash_completion_out" "download-all"
 assert_contains "$bash_completion_out" "download-sync"
+assert_contains "$bash_completion_out" "rename"
 
 set +e
 help_out="$(bash -lc "\"$CLI\" help" 2>&1)"

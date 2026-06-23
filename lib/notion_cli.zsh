@@ -928,6 +928,74 @@ notion_build_page_create_payload() {
   '
 }
 
+notion_resolve_sync_target() {
+  local config_path="$1"
+  local notes_root="$2"
+  local target_file="$3"
+
+  local abs_notes_root="${notes_root:A}"
+  local abs_target="${target_file:a}"
+  if ! notion_ensure_path_inside_notes_root "$abs_target" "$abs_notes_root"; then
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
+    return 1
+  fi
+
+  local relative_path first_segment relation_page_id relation_property title
+  relative_path="$(notion_relative_path_under_notes_root "$abs_target" "$abs_notes_root")" || {
+    notion_print_error "file must be inside notes_root: $abs_notes_root"
+    return 1
+  }
+  first_segment="${relative_path%%/*}"
+  relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
+  relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
+  if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
+    notion_print_error "no mapping found for first-level directory '$first_segment'"
+    return 1
+  fi
+
+  title="${abs_target:t:r}"
+
+  jq -nc \
+    --arg abs_file "$abs_target" \
+    --arg relative_path "$relative_path" \
+    --arg first_segment "$first_segment" \
+    --arg relation_page_id "$relation_page_id" \
+    --arg relation_property "$relation_property" \
+    --arg title "$title" \
+    '{
+      abs_file: $abs_file,
+      relative_path: $relative_path,
+      first_segment: $first_segment,
+      relation_page_id: $relation_page_id,
+      relation_property: $relation_property,
+      title: $title
+    }'
+}
+
+notion_move_sidecar_if_present() {
+  local config_path="$1"
+  local old_relative_path="$2"
+  local new_relative_path="$3"
+
+  local old_sidecar_path new_sidecar_path
+  old_sidecar_path="$(notion_metadata_sidecar_path "$config_path" "$old_relative_path")"
+  new_sidecar_path="$(notion_metadata_sidecar_path "$config_path" "$new_relative_path")"
+
+  if [[ -f "$old_sidecar_path" ]]; then
+    mkdir -p "${new_sidecar_path%/*}"
+    mv "$old_sidecar_path" "$new_sidecar_path"
+  fi
+}
+
+notion_build_page_patch_payload() {
+  local page_metadata_json="$1"
+
+  jq -n --argjson meta "$page_metadata_json" '
+    {properties: $meta.properties}
+    + (if $meta.icon == null then {} else {icon: $meta.icon} end)
+  '
+}
+
 notion_resolve_appended_child_id() {
   local parent_id="$1"
   local notion_token="$2"
@@ -1526,6 +1594,170 @@ notion_cmd_delete() {
   return 0
 }
 
+notion_cmd_rename() {
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_rename_usage
+    return 0
+  fi
+
+  local old_file="${1:-}"
+  local new_file="${2:-}"
+  if [[ -z "$old_file" || -z "$new_file" || $# -ne 2 ]]; then
+    notion_print_error "rename requires <old-file.md> and <new-file.md>"
+    notion_rename_usage
+    return 1
+  fi
+
+  if [[ "$old_file" != *.md || "$new_file" != *.md ]]; then
+    notion_print_error "rename requires <*.md> paths"
+    notion_rename_usage
+    return 1
+  fi
+
+  local abs_old_file="${old_file:a}"
+  local abs_new_file="${new_file:a}"
+  if [[ ! -f "$abs_old_file" ]]; then
+    notion_print_error "file not found: $old_file"
+    return 1
+  fi
+  if [[ "$abs_old_file" == "$abs_new_file" ]]; then
+    notion_print_error "old and new file paths must differ"
+    return 1
+  fi
+  if [[ -e "$abs_new_file" ]]; then
+    notion_print_error "target already exists: $new_file"
+    return 1
+  fi
+
+  local config_path
+  config_path="$(notion_find_and_prepare_config "${abs_old_file:h}")" || {
+    notion_print_error "No project config found. Run 'ns init' first."
+    return 1
+  }
+
+  local notes_root abs_notes_root
+  notes_root="$(notion_config_get_notes_root "$config_path")"
+  abs_notes_root="${notes_root:A}"
+
+  local old_target_json new_target_json
+  old_target_json="$(notion_resolve_sync_target "$config_path" "$notes_root" "$abs_old_file")" || return 1
+  new_target_json="$(notion_resolve_sync_target "$config_path" "$notes_root" "$abs_new_file")" || return 1
+
+  local old_relative_path new_relative_path old_first_segment new_first_segment
+  local old_relation_page_id old_relation_property new_relation_page_id new_relation_property
+  local old_title new_title old_sidecar_path
+
+  old_relative_path="$(printf '%s' "$old_target_json" | jq -r '.relative_path')"
+  new_relative_path="$(printf '%s' "$new_target_json" | jq -r '.relative_path')"
+  old_first_segment="$(printf '%s' "$old_target_json" | jq -r '.first_segment')"
+  new_first_segment="$(printf '%s' "$new_target_json" | jq -r '.first_segment')"
+  old_relation_page_id="$(printf '%s' "$old_target_json" | jq -r '.relation_page_id')"
+  old_relation_property="$(printf '%s' "$old_target_json" | jq -r '.relation_property')"
+  new_relation_page_id="$(printf '%s' "$new_target_json" | jq -r '.relation_page_id')"
+  new_relation_property="$(printf '%s' "$new_target_json" | jq -r '.relation_property')"
+  old_title="$(printf '%s' "$old_target_json" | jq -r '.title')"
+  new_title="$(printf '%s' "$new_target_json" | jq -r '.title')"
+  old_sidecar_path="$(notion_metadata_sidecar_path "$config_path" "$old_relative_path")"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    notion_print_info "Dry-run rename intent:"
+    echo "  old_file: $abs_old_file"
+    echo "  new_file: $abs_new_file"
+    echo "  old_title: $old_title"
+    echo "  new_title: $new_title"
+    echo "  old_relation_page_id: ${old_relation_page_id:-<none>}"
+    echo "  old_relation_property: ${old_relation_property:-<none>}"
+    echo "  new_relation_page_id: ${new_relation_page_id:-<none>}"
+    echo "  new_relation_property: ${new_relation_property:-<none>}"
+    echo "  action: query exact old title${old_relation_page_id:+ and relation}; move local file; patch remote page title/relation"
+    echo "  local_file_exists: yes"
+    echo "  sidecar_exists: $([[ -f "$old_sidecar_path" ]] && echo yes || echo no)"
+    return 0
+  fi
+
+  local notion_token database_id title_property
+  notion_token="$(notion_require_token)" || return 1
+  database_id="$(notion_config_get_database_id "$config_path")"
+  title_property="$(notion_config_get_title_property "$config_path")"
+  if [[ -z "$database_id" ]]; then
+    notion_print_error "database_id missing in config. Re-run ns init."
+    return 1
+  fi
+
+  local query_payload search_response match_count page_json page_id
+  query_payload="$(notion_build_query_payload "$old_title" "$title_property" "$old_relation_page_id" "$old_relation_property")"
+  search_response="$(notion_query_all "$database_id" "$notion_token" "$query_payload")" || return 1
+  if printf '%s' "$search_response" | jq -e '.object == "error"' >/dev/null; then
+    notion_print_error "Notion query failed: $(printf '%s' "$search_response" | jq -r '.message')"
+    return 1
+  fi
+
+  match_count="$(printf '%s' "$search_response" | jq '.results | length')"
+  if [[ "$match_count" -eq 0 ]]; then
+    if [[ -n "$old_relation_page_id" ]]; then
+      notion_print_error "no remote page found for '$old_title' in relation '$old_first_segment'"
+    else
+      notion_print_error "no remote page found for '$old_title'"
+    fi
+    return 1
+  fi
+  if [[ "$match_count" -gt 1 ]]; then
+    if [[ -n "$old_relation_page_id" ]]; then
+      notion_print_error "ambiguous match for title '$old_title' in relation '$old_first_segment' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title+relation page exists."
+    else
+      notion_print_error "ambiguous match for title '$old_title' ($match_count pages)."
+      notion_print_warn "Refine remote data so only one exact title page exists."
+    fi
+    return 1
+  fi
+
+  page_json="$(printf '%s' "$search_response" | jq -c '.results[0]')"
+  page_id="$(printf '%s' "$page_json" | jq -r '.id // empty')"
+  if [[ -z "$page_id" ]]; then
+    notion_print_error "Notion rename failed: query response missing page id."
+    return 1
+  fi
+
+  local existing_metadata_json merged_metadata_json patch_payload response
+  existing_metadata_json="$(jq -nc \
+    --argjson props "$(notion_serializable_page_properties "$page_json" "$title_property" "$old_relation_property")" \
+    --argjson icon "$(notion_serializable_page_icon "$page_json")" \
+    '{properties: $props, icon: $icon}')"
+  merged_metadata_json="$(notion_merge_upload_properties "$existing_metadata_json" '{"properties":{},"icon":null}' "$title_property" "$new_title" "$new_relation_property" "$new_relation_page_id")"
+  patch_payload="$(notion_build_page_patch_payload "$merged_metadata_json")"
+
+  mkdir -p "${abs_new_file:h}"
+  mv "$abs_old_file" "$abs_new_file"
+  notion_move_sidecar_if_present "$config_path" "$old_relative_path" "$new_relative_path"
+  notion_config_move_watch_file_state "$config_path" "$old_relative_path" "$new_relative_path"
+
+  response="$(notion_api_request "PATCH" "https://api.notion.com/v1/pages/$page_id" "$notion_token" "$patch_payload")" || {
+    mkdir -p "${abs_old_file:h}"
+    mv "$abs_new_file" "$abs_old_file"
+    notion_move_sidecar_if_present "$config_path" "$new_relative_path" "$old_relative_path"
+    notion_config_move_watch_file_state "$config_path" "$new_relative_path" "$old_relative_path"
+    return 1
+  }
+  if printf '%s' "$response" | jq -e '.object == "error"' >/dev/null; then
+    mkdir -p "${abs_old_file:h}"
+    mv "$abs_new_file" "$abs_old_file"
+    notion_move_sidecar_if_present "$config_path" "$new_relative_path" "$old_relative_path"
+    notion_config_move_watch_file_state "$config_path" "$new_relative_path" "$old_relative_path"
+    notion_print_error "Notion rename failed: $(printf '%s' "$response" | jq -r '.message')"
+    return 1
+  fi
+
+  notion_append_sync_log_entry "$config_path" "$abs_notes_root" "rename" "$abs_new_file"
+  notion_print_success "Renamed '$old_title' to '$new_title' locally and remotely."
+  return 0
+}
+
 notion_cmd_download_all() {
   local dry_run=0
   if [[ "${1:-}" == "--dry-run" ]]; then
@@ -1757,6 +1989,9 @@ notion_main() {
   delete)
     notion_cmd_delete "$@"
     ;;
+  rename)
+    notion_cmd_rename "$@"
+    ;;
   download-all)
     notion_cmd_download_database_scope "$@"
     ;;
@@ -1880,7 +2115,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-sync watch watch-upload download delete download-all download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-sync watch watch-upload download delete rename download-all download-sync completion version" -- "$cur") )
       return 0
   fi
 
@@ -1896,6 +2131,9 @@ _ns() {
       fi
       ;;
     status|upload|watch-upload|download|delete)
+      COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
+      ;;
+    rename)
       COMPREPLY=( $(compgen -f -X '!*.md' -- "$cur") )
       ;;
     upload-sync|download-all|download-sync)
@@ -1939,6 +2177,7 @@ _ns() {
         'watch-upload[Upload one markdown file if watch is enabled for it]' \
         'download[Download markdown file]' \
         'delete[Delete markdown file locally and archive matching Notion page]' \
+        'rename[Rename markdown file locally and in Notion]' \
         'download-all[Download all Notion pages in current sync scope]' \
         'download-sync[Download all markdown files under current directory]' \
         'completion[Print completion script]' \
@@ -1954,6 +2193,9 @@ _ns() {
           ;;
         status|upload|watch-upload|download|delete)
           _arguments '1:markdown file:_files -g "*.md"'
+          ;;
+        rename)
+          _arguments '1:source markdown file:_files -g "*.md"' '2:target markdown file:_files -g "*.md"' '--dry-run[Show rename intent without changing local or remote state]' '--help[Show help]'
           ;;
         upload-sync)
           _arguments '--dry-run[Show upload intent for each markdown file]' '--help[Show help]'

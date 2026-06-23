@@ -202,3 +202,26 @@ notion_config_get_enabled_watch_files() {
   local config_path="$1"
   jq -r '.watch.files // {} | to_entries | map(select(.value.enabled == true) | .key) | .[]?' "$config_path"
 }
+
+notion_config_move_watch_file_state() {
+  local config_path="$1"
+  local old_relative_path="$2"
+  local new_relative_path="$3"
+  local tmp_cfg
+
+  tmp_cfg="$(mktemp)"
+  jq \
+    --arg old_rel "$old_relative_path" \
+    --arg new_rel "$new_relative_path" \
+    '
+      .watch = (.watch // {})
+      | .watch.files = (.watch.files // {})
+      | if .watch.files[$old_rel] == null then
+          .
+        else
+          .watch.files[$new_rel] = .watch.files[$old_rel]
+          | del(.watch.files[$old_rel])
+        end
+    ' "$config_path" >"$tmp_cfg"
+  mv "$tmp_cfg" "$config_path"
+}

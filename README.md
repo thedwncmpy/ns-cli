@@ -298,12 +298,19 @@ ns watch [<file.md>] [--enable|--disable] [--cooldown-seconds <n>]
 ns watch-upload <file.md>
 ns download [--dry-run] <file.md>
 ns delete [--dry-run] <file.md>
+ns rename [--dry-run] <old-file.md> <new-file.md>
 ns download-all [--dry-run]
 ns download-sync [--dry-run]
 ns completion <zsh|bash>
 ns version
 ```
 </details>
+
+Rename a note locally and in Notion:
+
+```bash
+ns rename project/today.md archive/weekly-summary.md
+```
 
 ## Markdown Notes
 
@@ -385,7 +392,7 @@ In legacy mode, relation property defaults to `notebook`.
 
 ## Guardrails
 
-- `upload`, `download`, and `delete` require `.md`
+- `upload`, `download`, `delete`, and `rename` require `.md`
 - Target paths must be inside configured `notes_root`
 - Mapping must exist for the first-level directory when the file is not at the root of `notes_root`
 - Root-level files are allowed without a mapping
@@ -400,7 +407,8 @@ In legacy mode, relation property defaults to `notebook`.
 - `watch-upload <file.md>` is a one-shot upload intended for editor save hooks and uses the same cooldown rules as `watch`.
 - Watch state is per file: each enabled file stores its own cooldown and `last_uploaded_at`.
 - Concurrent saves of the same file are deduplicated with a per-file lock under `.notion-cli/locks/`; one upload runs and overlapping attempts exit with `sync already in progress`.
-- Successful upload, download, and delete operations append timestamped entries to `.ns-cli/sync.log` using local time with timezone offset.
+- Successful upload, download, delete, and rename operations append timestamped entries to `.ns-cli/sync.log` using local time with timezone offset.
+- `rename` moves the local Markdown file, its sidecar metadata file, and any watch state to the new relative path, then patches the remote page title and mapped relation.
 - `download-sync` works from local file discovery and does not discover remote-only pages.
 - When `upload` finds a single matching page, it archives that page and creates a new one instead of patching blocks in place.
 - Downloaded Markdown is body-only; page properties and icon metadata are stored in `.notion-cli/pages/...json` sidecars.

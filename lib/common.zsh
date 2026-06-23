@@ -19,6 +19,7 @@ notion_usage() {
   notion_print_usage "  watch-upload Upload one file, but only if watch is enabled for it"
   notion_print_usage "  download     Download one markdown file from Notion"
   notion_print_usage "  delete       Delete one local markdown file and archive its Notion page"
+  notion_print_usage "  rename       Rename one markdown file locally and remotely in Notion"
   notion_print_usage "  download-all Download all matching Notion pages into the project notes root"
   notion_print_usage "  download-sync Download matching Notion pages into the current folder"
   notion_print_usage "  help         Show this help"
@@ -66,6 +67,10 @@ notion_download_usage() {
 
 notion_delete_usage() {
   notion_print_usage "Usage: ns delete [--dry-run] <file.md>"
+}
+
+notion_rename_usage() {
+  notion_print_usage "Usage: ns rename [--dry-run] <old-file.md> <new-file.md>"
 }
 
 notion_download_all_usage() {
