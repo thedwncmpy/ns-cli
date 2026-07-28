@@ -536,6 +536,24 @@ Language aliases include:
 - `yml` -> `yaml`
 - `md` -> `markdown`
 
+### Vim Snippets
+
+An UltiSnips-compatible Vim snippet file is included at:
+
+```text
+share/vim/UltiSnips/markdown.snippets
+```
+
+Install it by copying or symlinking it into your Vim snippets directory:
+
+```bash
+mkdir -p ~/.vim/UltiSnips
+ln -sf /path/to/ns/share/vim/UltiSnips/markdown.snippets ~/.vim/UltiSnips/markdown.snippets
+```
+
+Snippet triggers are prefixed with `ns-`, for example `ns-toggle3`,
+`ns-todo`, `ns-warning`, `ns-code`, `ns-page`, and `ns-db`.
+
 ## Common Workflows
 
 Initialize and upload one file:

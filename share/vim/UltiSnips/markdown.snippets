@@ -1,0 +1,73 @@
+priority -50
+
+snippet ns-toggle1 "ns Notion toggle heading 1" b
+# [toggle] ${1:Section}
+
+  ${2:Content}
+endsnippet
+
+snippet ns-toggle2 "ns Notion toggle heading 2" b
+## [toggle] ${1:Section}
+
+  ${2:Content}
+endsnippet
+
+snippet ns-toggle3 "ns Notion toggle heading 3" b
+### [toggle] ${1:Section}
+
+  ${2:Content}
+endsnippet
+
+snippet ns-todo "ns unchecked todo" b
+- [ ] ${1:Task}
+endsnippet
+
+snippet ns-done "ns checked todo" b
+- [x] ${1:Task}
+endsnippet
+
+snippet ns-quote "ns Notion quote" b
+> ${1:Quote}
+endsnippet
+
+snippet ns-note "ns Notion note callout" b
+> [!NOTE] ${1:Text}
+endsnippet
+
+snippet ns-info "ns Notion info callout" b
+> [!INFO] ${1:Text}
+endsnippet
+
+snippet ns-warning "ns Notion warning callout" b
+> [!WARNING] ${1:Text}
+endsnippet
+
+snippet ns-error "ns Notion error callout" b
+> [!ERROR] ${1:Text}
+endsnippet
+
+snippet ns-success "ns Notion success callout" b
+> [!SUCCESS] ${1:Text}
+endsnippet
+
+snippet ns-code "ns Notion code block" b
+\`\`\`${1:language}
+${2:code}
+\`\`\`
+endsnippet
+
+snippet ns-divider "ns Notion divider" b
+---
+endsnippet
+
+snippet ns-toc "ns Notion table of contents" b
+[TOC]
+endsnippet
+
+snippet ns-page "ns Notion page link" b
+[[link_to_page page_id:${1:page_id}]]
+endsnippet
+
+snippet ns-db "ns Notion database link" b
+[[link_to_page database_id:${1:database_id}]]
+endsnippet

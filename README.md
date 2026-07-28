@@ -423,3 +423,24 @@ Load completion in your shell startup:
 ```bash
 eval "$(ns completion zsh)"
 ```
+
+## Vim Snippets
+
+`ns` ships an UltiSnips-compatible Vim snippet file for the Markdown syntax it
+supports:
+
+```text
+share/vim/UltiSnips/markdown.snippets
+```
+
+To use it, copy or symlink that file into your Vim snippets directory, for
+example:
+
+```bash
+mkdir -p ~/.vim/UltiSnips
+ln -sf "$(pwd)/share/vim/UltiSnips/markdown.snippets" ~/.vim/UltiSnips/markdown.snippets
+```
+
+Snippet triggers are prefixed with `ns-`, including `ns-toggle1`,
+`ns-toggle2`, `ns-toggle3`, `ns-todo`, `ns-done`, `ns-note`, `ns-warning`,
+`ns-code`, `ns-toc`, `ns-page`, and `ns-db`.
