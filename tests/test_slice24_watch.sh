@@ -195,8 +195,7 @@ assert_contains "$concurrent_enable_out" "Updated watch settings for 'project/co
 set +e
 concurrent_watch_upload_out="$(
   cd "$notes_root"
-  export SLICE24_SLOW_APPEND=1
-  "$CLI" watch-upload "project/concurrent.md" >"$tmp_dir/concurrent-1.log" 2>&1 &
+  SLICE24_SLOW_APPEND=1 "$CLI" watch-upload "project/concurrent.md" >"$tmp_dir/concurrent-1.log" 2>&1 &
   pid1=$!
   sleep 0.2
   "$CLI" watch-upload "project/concurrent.md" >"$tmp_dir/concurrent-2.log" 2>&1 &
@@ -223,13 +222,11 @@ assert_contains "$stale_enable_out" "Updated watch settings for 'project/stale-l
 set +e
 stale_recovery_out="$(
   cd "$notes_root"
-  export SLICE24_SLOW_APPEND=1
-  "$CLI" watch-upload "project/stale-lock.md" >"$tmp_dir/stale-killed.log" 2>&1 &
+  SLICE24_SLOW_APPEND=1 "$CLI" watch-upload "project/stale-lock.md" >"$tmp_dir/stale-killed.log" 2>&1 &
   stale_pid=$!
   sleep 0.2
   kill -TERM "$stale_pid"
   wait "$stale_pid" || true
-  unset SLICE24_SLOW_APPEND
   "$CLI" watch-upload "project/stale-lock.md" 2>&1
 )"
 code=$?

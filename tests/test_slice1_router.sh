@@ -63,6 +63,7 @@ assert_contains "$out" "rename"
 assert_contains "$out" "download-all"
 assert_contains "$out" "download-sync"
 assert_contains "$out" "status"
+assert_contains "$out" "snippets"
 
 # Test Case: Running an unrecognized command should show an error and fail
 set +e
@@ -75,7 +76,7 @@ assert_contains "$out" "Unknown command: frob"
 # Test Case: Smoke tests for command dispatching
 # Ensures that 'init', 'link', 'upload', and 'download' are correctly routed 
 # to their respective handlers when the --help flag is used.
-for cmd in init link status upload upload-sync watch watch-upload download delete rename download-all download-sync; do
+for cmd in init link status upload upload-sync watch watch-upload download delete rename download-all download-sync snippets; do
   set +e
   out="$($CLI "$cmd" --help 2>&1)"
   code=$?

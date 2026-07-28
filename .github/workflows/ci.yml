@@ -1,8 +1,8 @@
 name: CI
 
 env:
-  HOMEBREW_TAP_REPOSITORY: thedwncmpy/homebrew-notion-cli
-  HOMEBREW_TAP_PATH: homebrew-notion-cli
+  HOMEBREW_TAP_REPOSITORY: thedwncmpy/homebrew-ns
+  HOMEBREW_TAP_PATH: homebrew-ns
 
 on:
   push:

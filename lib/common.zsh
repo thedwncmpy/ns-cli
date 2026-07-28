@@ -12,6 +12,7 @@ notion_usage() {
   notion_print_usage "  link         Connect a subfolder to a Notion relation (or property)"
   notion_print_usage "  status       Show how one markdown file will sync to Notion"
   notion_print_usage "  completion   Print the shell completion script"
+  notion_print_usage "  snippets     Print editor snippet definitions"
   notion_print_usage "  version      Show the installed ns version"
   notion_print_usage "  upload       Upload one markdown file to Notion"
   notion_print_usage "  upload-sync  Upload all markdown files under the current folder"
@@ -89,6 +90,10 @@ notion_status_usage() {
 
 notion_completion_usage() {
   notion_print_usage "Usage: ns completion <zsh|bash>"
+}
+
+notion_snippets_usage() {
+  notion_print_usage "Usage: ns snippets <ultisnips>"
 }
 
 notion_is_tty() {

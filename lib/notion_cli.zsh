@@ -1155,12 +1155,14 @@ notion_cmd_upload() {
     return 1
   fi
 
-  # 3) Locate config via find_config; read notes_root + mappings.
+  # 3) Locate config from the current project first, then from the file path.
   local config_path
-  config_path="$(notion_find_and_prepare_config "${abs_file:h}")" || {
-    notion_print_error "No project config found. Run 'ns init' first."
-    return 1
-  }
+  if ! config_path="$(notion_find_and_prepare_config 2>/dev/null)"; then
+    config_path="$(notion_find_and_prepare_config "${abs_file:h}")" || {
+      notion_print_error "No project config found. Run 'ns init' first."
+      return 1
+    }
+  fi
 
   # 4) Ensure file is inside notes_root.
   local notes_root
@@ -1971,6 +1973,9 @@ notion_main() {
   completion)
     notion_cmd_completion "$@"
     ;;
+  snippets)
+    notion_cmd_snippets "$@"
+    ;;
   upload)
     notion_cmd_upload "$@"
     ;;
@@ -2115,7 +2120,7 @@ _ns() {
   cmd="${COMP_WORDS[1]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-      COMPREPLY=( $(compgen -W "help init link status upload upload-sync watch watch-upload download delete rename download-all download-sync completion version" -- "$cur") )
+      COMPREPLY=( $(compgen -W "help init link status upload upload-sync watch watch-upload download delete rename download-all download-sync completion snippets version" -- "$cur") )
       return 0
   fi
 
@@ -2144,6 +2149,9 @@ _ns() {
       ;;
     completion)
       COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
+      ;;
+    snippets)
+      COMPREPLY=( $(compgen -W "ultisnips --help" -- "$cur") )
       ;;
   esac
 }
@@ -2181,6 +2189,7 @@ _ns() {
         'download-all[Download all Notion pages in current sync scope]' \
         'download-sync[Download all markdown files under current directory]' \
         'completion[Print completion script]' \
+        'snippets[Print editor snippet definitions]' \
         'version[Show ns version]'
       ;;
     args)
@@ -2209,12 +2218,108 @@ _ns() {
         completion)
           _values 'shell' zsh bash
           ;;
+        snippets)
+          _values 'snippet format' ultisnips
+          ;;
       esac
       ;;
   esac
 }
 
 compdef _ns ns
+EOF
+}
+
+notion_cmd_snippets() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    notion_snippets_usage
+    return 0
+  fi
+  if [[ "${1:-}" != "ultisnips" ]]; then
+    notion_print_error "snippets requires target (supported: ultisnips)"
+    notion_snippets_usage
+    return 1
+  fi
+  if [[ $# -gt 1 ]]; then
+    notion_print_error "snippets ultisnips does not accept extra arguments"
+    notion_snippets_usage
+    return 1
+  fi
+
+  cat <<'EOF'
+priority -50
+
+snippet ns-toggle1 "ns Notion toggle heading 1" b
+# [toggle] ${1:Section}
+
+  ${2:Content}
+endsnippet
+
+snippet ns-toggle2 "ns Notion toggle heading 2" b
+## [toggle] ${1:Section}
+
+  ${2:Content}
+endsnippet
+
+snippet ns-toggle3 "ns Notion toggle heading 3" b
+### [toggle] ${1:Section}
+
+  ${2:Content}
+endsnippet
+
+snippet ns-todo "ns unchecked todo" b
+- [ ] ${1:Task}
+endsnippet
+
+snippet ns-done "ns checked todo" b
+- [x] ${1:Task}
+endsnippet
+
+snippet ns-quote "ns Notion quote" b
+> ${1:Quote}
+endsnippet
+
+snippet ns-note "ns Notion note callout" b
+> [!NOTE] ${1:Text}
+endsnippet
+
+snippet ns-info "ns Notion info callout" b
+> [!INFO] ${1:Text}
+endsnippet
+
+snippet ns-warning "ns Notion warning callout" b
+> [!WARNING] ${1:Text}
+endsnippet
+
+snippet ns-error "ns Notion error callout" b
+> [!ERROR] ${1:Text}
+endsnippet
+
+snippet ns-success "ns Notion success callout" b
+> [!SUCCESS] ${1:Text}
+endsnippet
+
+snippet ns-code "ns Notion code block" b
+\`\`\`${1:language}
+${2:code}
+\`\`\`
+endsnippet
+
+snippet ns-divider "ns Notion divider" b
+---
+endsnippet
+
+snippet ns-toc "ns Notion table of contents" b
+[TOC]
+endsnippet
+
+snippet ns-page "ns Notion page link" b
+[[link_to_page page_id:${1:page_id}]]
+endsnippet
+
+snippet ns-db "ns Notion database link" b
+[[link_to_page database_id:${1:database_id}]]
+endsnippet
 EOF
 }
 

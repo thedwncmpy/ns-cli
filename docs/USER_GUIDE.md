@@ -538,17 +538,30 @@ Language aliases include:
 
 ### Vim Snippets
 
-An UltiSnips-compatible Vim snippet file is included at:
+`ns` can print UltiSnips-compatible Vim snippets:
+
+```bash
+ns snippets ultisnips
+```
+
+A copy is also included in the source tree at:
 
 ```text
 share/vim/UltiSnips/markdown.snippets
 ```
 
-Install it by copying or symlinking it into your Vim snippets directory:
+Install the generated snippets by writing them into your Vim snippets directory:
 
 ```bash
 mkdir -p ~/.vim/UltiSnips
-ln -sf /path/to/ns/share/vim/UltiSnips/markdown.snippets ~/.vim/UltiSnips/markdown.snippets
+ns snippets ultisnips > ~/.vim/UltiSnips/markdown.snippets
+```
+
+For LazyVim/LuaSnip, write them into your Neovim snippets directory:
+
+```bash
+mkdir -p ~/.config/nvim/snippets
+ns snippets ultisnips > ~/.config/nvim/snippets/markdown.snippets
 ```
 
 Snippet triggers are prefixed with `ns-`, for example `ns-toggle3`,

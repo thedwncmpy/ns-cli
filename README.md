@@ -426,19 +426,31 @@ eval "$(ns completion zsh)"
 
 ## Vim Snippets
 
-`ns` ships an UltiSnips-compatible Vim snippet file for the Markdown syntax it
+`ns` can print UltiSnips-compatible Vim snippets for the Markdown syntax it
 supports:
+
+```bash
+ns snippets ultisnips
+```
+
+A copy is also included in the source tree:
 
 ```text
 share/vim/UltiSnips/markdown.snippets
 ```
 
-To use it, copy or symlink that file into your Vim snippets directory, for
-example:
+To use the generated snippets, write them into your Vim snippets directory:
 
 ```bash
 mkdir -p ~/.vim/UltiSnips
-ln -sf "$(pwd)/share/vim/UltiSnips/markdown.snippets" ~/.vim/UltiSnips/markdown.snippets
+ns snippets ultisnips > ~/.vim/UltiSnips/markdown.snippets
+```
+
+For LazyVim/LuaSnip, write the same output into your Neovim snippets directory:
+
+```bash
+mkdir -p ~/.config/nvim/snippets
+ns snippets ultisnips > ~/.config/nvim/snippets/markdown.snippets
 ```
 
 Snippet triggers are prefixed with `ns-`, including `ns-toggle1`,

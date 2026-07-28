@@ -38,8 +38,27 @@ assert_contains "$completion_out" "watch"
 assert_contains "$completion_out" "watch-upload"
 assert_contains "$completion_out" "download-all"
 assert_contains "$completion_out" "rename"
+assert_contains "$completion_out" "snippets"
+assert_contains "$completion_out" "ultisnips"
 assert_contains "$completion_out" "_files -g \"*.md\""
 assert_contains "$completion_out" "--title-property"
+
+set +e
+snippets_out="$($CLI snippets ultisnips 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$snippets_out" "priority -50"
+assert_contains "$snippets_out" "snippet ns-toggle3"
+assert_contains "$snippets_out" "snippet ns-todo"
+assert_contains "$snippets_out" "[[link_to_page page_id:\${1:page_id}]]"
+
+set +e
+snippets_help_out="$($CLI snippets --help 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$snippets_help_out" "Usage: ns snippets <ultisnips>"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
