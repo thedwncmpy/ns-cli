@@ -93,7 +93,7 @@ notion_completion_usage() {
 }
 
 notion_snippets_usage() {
-  notion_print_usage "Usage: ns snippets <ultisnips>"
+  notion_print_usage "Usage: ns snippets <ultisnips|snipmate>"
 }
 
 notion_is_tty() {

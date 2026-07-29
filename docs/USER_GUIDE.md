@@ -561,7 +561,7 @@ For LazyVim/LuaSnip, write them into your Neovim snippets directory:
 
 ```bash
 mkdir -p ~/.config/nvim/snippets
-ns snippets ultisnips > ~/.config/nvim/snippets/markdown.snippets
+ns snippets snipmate > ~/.config/nvim/snippets/markdown.snippets
 ```
 
 Snippet triggers are prefixed with `ns-`, for example `ns-toggle3`,

@@ -2151,7 +2151,7 @@ _ns() {
       COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
       ;;
     snippets)
-      COMPREPLY=( $(compgen -W "ultisnips --help" -- "$cur") )
+      COMPREPLY=( $(compgen -W "ultisnips snipmate --help" -- "$cur") )
       ;;
   esac
 }
@@ -2219,7 +2219,7 @@ _ns() {
           _values 'shell' zsh bash
           ;;
         snippets)
-          _values 'snippet format' ultisnips
+          _values 'snippet format' ultisnips snipmate
           ;;
       esac
       ;;
@@ -2235,15 +2235,61 @@ notion_cmd_snippets() {
     notion_snippets_usage
     return 0
   fi
-  if [[ "${1:-}" != "ultisnips" ]]; then
-    notion_print_error "snippets requires target (supported: ultisnips)"
+  if [[ "${1:-}" != "ultisnips" && "${1:-}" != "snipmate" ]]; then
+    notion_print_error "snippets requires target (supported: ultisnips, snipmate)"
     notion_snippets_usage
     return 1
   fi
   if [[ $# -gt 1 ]]; then
-    notion_print_error "snippets ultisnips does not accept extra arguments"
+    notion_print_error "snippets ${1:-} does not accept extra arguments"
     notion_snippets_usage
     return 1
+  fi
+
+  if [[ "${1:-}" == "snipmate" ]]; then
+    cat <<'EOF'
+snippet ns-toggle1 ns Notion toggle heading 1
+	# [toggle] ${1:Section}
+
+	  ${2:Content}
+snippet ns-toggle2 ns Notion toggle heading 2
+	## [toggle] ${1:Section}
+
+	  ${2:Content}
+snippet ns-toggle3 ns Notion toggle heading 3
+	### [toggle] ${1:Section}
+
+	  ${2:Content}
+snippet ns-todo ns unchecked todo
+	- [ ] ${1:Task}
+snippet ns-done ns checked todo
+	- [x] ${1:Task}
+snippet ns-quote ns Notion quote
+	> ${1:Quote}
+snippet ns-note ns Notion note callout
+	> [!NOTE] ${1:Text}
+snippet ns-info ns Notion info callout
+	> [!INFO] ${1:Text}
+snippet ns-warning ns Notion warning callout
+	> [!WARNING] ${1:Text}
+snippet ns-error ns Notion error callout
+	> [!ERROR] ${1:Text}
+snippet ns-success ns Notion success callout
+	> [!SUCCESS] ${1:Text}
+snippet ns-code ns Notion code block
+	\`\`\`${1:language}
+	${2:code}
+	\`\`\`
+snippet ns-divider ns Notion divider
+	---
+snippet ns-toc ns Notion table of contents
+	[TOC]
+snippet ns-page ns Notion page link
+	[[link_to_page page_id:${1:page_id}]]
+snippet ns-db ns Notion database link
+	[[link_to_page database_id:${1:database_id}]]
+EOF
+    return 0
   fi
 
   cat <<'EOF'

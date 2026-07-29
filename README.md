@@ -450,7 +450,7 @@ For LazyVim/LuaSnip, write the same output into your Neovim snippets directory:
 
 ```bash
 mkdir -p ~/.config/nvim/snippets
-ns snippets ultisnips > ~/.config/nvim/snippets/markdown.snippets
+ns snippets snipmate > ~/.config/nvim/snippets/markdown.snippets
 ```
 
 Snippet triggers are prefixed with `ns-`, including `ns-toggle1`,
