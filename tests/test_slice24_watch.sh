@@ -126,15 +126,25 @@ assert_exit_code "$code" 0
 assert_contains "$watch_out" "Watching 1 enabled markdown file(s)"
 assert_contains "$watch_out" "Change detected: project/watch-note.md"
 assert_contains "$watch_out" "Uploaded 'watch-note' successfully."
-assert_contains "$watch_out" "Skipping 'project/watch-note.md'; cooldown active"
+if [[ "$watch_out" == *"Skipping 'project/watch-note.md'; cooldown active"* ]]; then
+  fail "changed file should not be blocked by cooldown"
+fi
 
 query_count="$(grep -c -- "/v1/databases/db_test/query" "$SLICE24_CURL_LOG" || true)"
-[[ "$query_count" -eq 1 ]] || fail "expected 1 database query due to cooldown, got $query_count"
+[[ "$query_count" -eq 2 ]] || fail "expected 2 database queries for 2 changed files, got $query_count"
 if grep -q '"equals":"ignored"' "$SLICE24_CURL_LOG"; then
   fail "did not expect ignored.md to be uploaded"
 fi
 
 [[ "$(jq -r '.watch.files["project/watch-note.md"].last_uploaded_at // 0' "$config_path")" -gt 0 ]] || fail "expected last upload time recorded"
+[[ -n "$(jq -r '.watch.files["project/watch-note.md"].last_uploaded_file_token // empty' "$config_path")" ]] || fail "expected last uploaded file token recorded"
+
+set +e
+unchanged_watch_upload_out="$(cd "$notes_root" && "$CLI" watch-upload "project/watch-note.md" 2>&1)"
+code=$?
+set -e
+assert_exit_code "$code" 0
+assert_contains "$unchanged_watch_upload_out" "Skipping 'project/watch-note.md'; cooldown active"
 
 sync_log="$notes_root/.ns-cli/sync.log"
 [[ -f "$sync_log" ]] || fail "expected sync log to be created"

@@ -123,7 +123,7 @@ notion_watch_process_file_change() {
   local notes_root="$2"
   local relative_path="$3"
 
-  local now_epoch last_upload_epoch remaining abs_file cooldown_seconds lock_dir
+  local now_epoch last_upload_epoch last_uploaded_file_token current_file_token remaining abs_file cooldown_seconds lock_dir
   lock_dir="$(notion_watch_lock_dir "$config_path" "$relative_path")"
   if ! notion_watch_acquire_lock "$lock_dir"; then
     notion_print_warn "Skipping '$relative_path'; sync already in progress."
@@ -133,10 +133,13 @@ notion_watch_process_file_change() {
 
   local exit_code=1
 
+  abs_file="$notes_root/$relative_path"
+  current_file_token="$(notion_file_mtime_token "$abs_file")" || current_file_token=""
   cooldown_seconds="$(notion_config_get_watch_file_cooldown_seconds "$config_path" "$relative_path")"
   now_epoch="$(notion_current_epoch)"
   last_upload_epoch="$(notion_config_get_last_upload_epoch "$config_path" "$relative_path")"
-  if [[ -n "$last_upload_epoch" && "$last_upload_epoch" -gt 0 ]]; then
+  last_uploaded_file_token="$(notion_config_get_last_uploaded_file_token "$config_path" "$relative_path")"
+  if [[ -n "$last_upload_epoch" && "$last_upload_epoch" -gt 0 && -n "$current_file_token" && "$current_file_token" == "$last_uploaded_file_token" ]]; then
     remaining=$((cooldown_seconds - (now_epoch - last_upload_epoch)))
     if [[ "$remaining" -gt 0 ]]; then
       notion_print_warn "Skipping '$relative_path'; cooldown active for ${remaining}s."
@@ -147,10 +150,12 @@ notion_watch_process_file_change() {
     fi
   fi
 
-  abs_file="$notes_root/$relative_path"
   notion_print_info "Change detected: $relative_path"
   if notion_cmd_upload "$abs_file"; then
     notion_config_set_last_upload_epoch "$config_path" "$relative_path" "$now_epoch"
+    if [[ -n "$current_file_token" ]]; then
+      notion_config_set_last_uploaded_file_token "$config_path" "$relative_path" "$current_file_token"
+    fi
     exit_code=0
   fi
 

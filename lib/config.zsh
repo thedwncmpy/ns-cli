@@ -180,6 +180,12 @@ notion_config_get_last_upload_epoch() {
   jq -r --arg rel "$relative_path" '.watch.files[$rel].last_uploaded_at // 0' "$config_path"
 }
 
+notion_config_get_last_uploaded_file_token() {
+  local config_path="$1"
+  local relative_path="$2"
+  jq -r --arg rel "$relative_path" '.watch.files[$rel].last_uploaded_file_token // empty' "$config_path"
+}
+
 notion_config_set_last_upload_epoch() {
   local config_path="$1"
   local relative_path="$2"
@@ -194,6 +200,24 @@ notion_config_set_last_upload_epoch() {
       .watch = (.watch // {})
       | .watch.files = (.watch.files // {})
       | .watch.files[$rel] = ((.watch.files[$rel] // {}) + {last_uploaded_at: $epoch})
+    ' "$config_path" >"$tmp_cfg"
+  mv "$tmp_cfg" "$config_path"
+}
+
+notion_config_set_last_uploaded_file_token() {
+  local config_path="$1"
+  local relative_path="$2"
+  local file_token="$3"
+  local tmp_cfg
+
+  tmp_cfg="$(mktemp)"
+  jq \
+    --arg rel "$relative_path" \
+    --arg file_token "$file_token" \
+    '
+      .watch = (.watch // {})
+      | .watch.files = (.watch.files // {})
+      | .watch.files[$rel] = ((.watch.files[$rel] // {}) + {last_uploaded_file_token: $file_token})
     ' "$config_path" >"$tmp_cfg"
   mv "$tmp_cfg" "$config_path"
 }
