@@ -1,8 +1,7 @@
 name: CI
 
-env:
-  HOMEBREW_TAP_REPOSITORY: thedwncmpy/homebrew-ns
-  HOMEBREW_TAP_PATH: homebrew-ns
+permissions:
+  contents: read
 
 on:
   push:
@@ -12,8 +11,8 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to bump in tap (example: v0.1.9)"
-        required: false
+        description: "Published release tag to update in Formula/ns.rb (example: v0.2.16)"
+        required: true
         type: string
 
 jobs:
@@ -21,17 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout homebrew formula repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
-          path: ${{ env.HOMEBREW_TAP_PATH }}
-      - name: Link formula repo at expected sibling path
-        run: ln -s "$GITHUB_WORKSPACE/${{ env.HOMEBREW_TAP_PATH }}" "$GITHUB_WORKSPACE/../${{ env.HOMEBREW_TAP_PATH }}"
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh bash jq shellcheck python3
+          sudo apt-get install -y zsh bash jq shellcheck python3 ruby
       - name: Syntax and lint
         run: |
           zsh -n lib/notion_cli.zsh
@@ -56,21 +48,24 @@ jobs:
           ./tests/test_slice12_status_completion.sh
           ./tests/test_slice13_bash_compat.sh
 
-  bump-homebrew-tap:
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+  bump-homebrew-formula:
+    needs: test
+    if: (github.event_name == 'release' && !github.event.release.prerelease) || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: homebrew-formula-update
+      cancel-in-progress: false
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
-
-      - name: Checkout tap repo
-        uses: actions/checkout@v4
         with:
-          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: ${{ env.HOMEBREW_TAP_PATH }}
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Update formula url/version/sha256
+        id: formula
         env:
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.release.tag_name }}
           REPO: ${{ github.repository }}
@@ -80,24 +75,37 @@ jobs:
             echo "Error: TAG is required. Provide workflow_dispatch input 'release_tag' (example: v0.1.9)."
             exit 1
           fi
-          FORMULA="${{ env.HOMEBREW_TAP_PATH }}/Formula/ns.rb"
+          if [[ ! "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: TAG must be a stable version such as v0.2.16."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          FORMULA="Formula/ns.rb"
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
           SHA="$(curl -fsSL "$TARBALL_URL" | sha256sum | awk '{print $1}')"
           VERSION="${TAG#v}"
 
-          sed -i "s|^\s*url \".*\"|  url \"$TARBALL_URL\"|" "$FORMULA"
-          sed -i "s|^\s*version \".*\"|  version \"$VERSION\"|" "$FORMULA"
-          sed -i "s|^\s*sha256 \".*\"|  sha256 \"$SHA\"|" "$FORMULA"
+          TARBALL_URL="$TARBALL_URL" SHA="$SHA" VERSION="$VERSION" ruby - "$FORMULA" <<'RUBY'
+          path = ARGV.fetch(0)
+          formula = File.read(path)
+          { "url" => ENV.fetch("TARBALL_URL"), "sha256" => ENV.fetch("SHA") }.each do |key, value|
+            pattern = /^  #{key} ".*"$/
+            abort "Missing or duplicate #{key} in #{path}" unless formula.scan(pattern).length == 1
+            formula.sub!(pattern, "  #{key} \"#{value}\"")
+          end
+          formula.sub!(/^  version ".*"$/, "  version \"#{ENV.fetch('VERSION')}\"")
+          File.write(path, formula)
+          RUBY
+          ruby -c "$FORMULA"
 
-      - name: Create pull request in tap repo
+      - name: Create formula update pull request
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: ${{ env.HOMEBREW_TAP_PATH }}
-          commit-message: "chore: bump ns formula to ${{ github.event.release.tag_name }}"
-          branch: "chore/bump-ns-${{ github.event.release.tag_name }}"
-          title: "chore: bump ns to ${{ github.event.release.tag_name }}"
+          token: ${{ secrets.FORMULA_UPDATE_TOKEN || github.token }}
+          commit-message: "chore: bump ns formula to ${{ steps.formula.outputs.tag }}"
+          branch: "chore/bump-ns-${{ steps.formula.outputs.tag }}"
+          title: "chore: bump ns to ${{ steps.formula.outputs.tag }}"
           body: |
-            Auto-generated from release `${{ github.event.release.tag_name }}` in `${{ github.repository }}`.
+            Updates the Homebrew formula to release `${{ steps.formula.outputs.tag }}` in `${{ github.repository }}`.
           add-paths: |
             Formula/ns.rb

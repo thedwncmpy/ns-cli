@@ -13,27 +13,61 @@ The CLI keeps sync behavior deterministic:
 <details>
 <summary>Homebrew</summary>
 
-Install from the public tap `thedwncmpy/homebrew-ns`:
+The CLI and Homebrew formula live in this repository. Add it as the
+`thedwncmpy/ns` tap using its explicit URL:
 
 ```bash
-brew tap thedwncmpy/homebrew-ns
-brew install ns
+brew tap thedwncmpy/ns https://github.com/thedwncmpy/ns-cli.git
+brew install thedwncmpy/ns/ns
 ```
 
-You can also install directly from the tapped formula in one command:
+If you previously installed from `homebrew-ns`, switch the existing tap's
+remote to this repository:
 
 ```bash
-brew install thedwncmpy/homebrew-ns/ns
+brew tap --custom-remote thedwncmpy/ns https://github.com/thedwncmpy/ns-cli.git
+brew update
+brew upgrade thedwncmpy/ns/ns
 ```
 
-Or install from the source repo checkout:
+For local development, tap your source checkout:
 
 ```bash
 git clone https://github.com/thedwncmpy/ns-cli.git
 cd ns-cli
-brew install ./Formula/ns.rb
+brew tap thedwncmpy/ns "$PWD"
+brew install --HEAD thedwncmpy/ns/ns
 ```
+
+The stable formula installs its tagged release; `--HEAD` installs the latest
+source from `main`.
 </details>
+
+## Homebrew releases
+
+`Formula/ns.rb` is maintained alongside the CLI. Publishing a stable GitHub
+release runs CI, downloads the tagged source archive, and opens a formula-update
+PR in this repository. Merge that PR to make the release available through
+`brew update` and `brew upgrade`. The formula update happens after tagging, so
+the archive checksum does not depend on a formula change inside that same tag.
+Prereleases do not update the stable formula.
+
+To retry an update for an existing release, run the CI workflow manually with
+`release_tag` set to its tag (for example, `v0.2.16`).
+
+The workflow uses `GITHUB_TOKEN` by default. In repository Settings → Actions →
+General, enable **Allow GitHub Actions to create and approve pull requests**.
+PRs created with `GITHUB_TOKEN` require approval before their CI workflows run.
+To run those checks automatically, optionally set `FORMULA_UPDATE_TOKEN` to a token with
+Contents and Pull requests read/write access to **ns-cli**; the workflow prefers
+that token when it is present. The old `HOMEBREW_TAP_TOKEN` is no longer used.
+See GitHub's [workflow triggering documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
+for token behavior.
+
+After pushing these changes and switching existing taps, the separate
+`homebrew-ns` checkout is no longer needed for development. Keep the old remote
+repository available until its users have migrated; their existing taps will
+otherwise continue to point there.
 
 <details>
 <summary>Requirements</summary>

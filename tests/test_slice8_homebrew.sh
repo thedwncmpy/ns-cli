@@ -3,18 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FORMULA="$ROOT_DIR/Formula/ns.rb"
-if [[ ! -f "$FORMULA" && -f "$ROOT_DIR/../homebrew-ns/Formula/ns.rb" ]]; then
-  FORMULA="$ROOT_DIR/../homebrew-ns/Formula/ns.rb"
-fi
-if [[ ! -f "$FORMULA" && -f "$ROOT_DIR/../homebrew-notion-cli/Formula/ns.rb" ]]; then
-  FORMULA="$ROOT_DIR/../homebrew-notion-cli/Formula/ns.rb"
-fi
-if [[ ! -f "$FORMULA" ]] && command -v brew >/dev/null 2>&1; then
-  TAP_ROOT="$(brew --repo thedwncmpy/ns 2>/dev/null || true)"
-  if [[ -n "$TAP_ROOT" && -f "$TAP_ROOT/Formula/ns.rb" ]]; then
-    FORMULA="$TAP_ROOT/Formula/ns.rb"
-  fi
-fi
 CLI="$ROOT_DIR/bin/ns"
 
 fail() {
