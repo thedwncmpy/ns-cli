@@ -21,6 +21,13 @@ brew tap thedwncmpy/ns https://github.com/thedwncmpy/ns-cli.git
 brew install thedwncmpy/ns/ns
 ```
 
+Alternatively, use SSH if your SSH key is configured for GitHub:
+
+```bash
+brew tap thedwncmpy/ns git@github.com:thedwncmpy/ns-cli.git
+brew install thedwncmpy/ns/ns
+```
+
 If you previously installed from `homebrew-ns`, switch the existing tap's
 remote to this repository:
 
@@ -29,6 +36,16 @@ brew tap --custom-remote thedwncmpy/ns https://github.com/thedwncmpy/ns-cli.git
 brew update
 brew upgrade thedwncmpy/ns/ns
 ```
+
+To switch an existing tap to SSH, use:
+
+```bash
+brew tap --custom-remote thedwncmpy/ns git@github.com:thedwncmpy/ns-cli.git
+brew update
+brew upgrade thedwncmpy/ns/ns
+```
+
+SSH applies to the tap repository; stable release archives are downloaded over HTTPS.
 
 For local development, tap your source checkout:
 
