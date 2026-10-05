@@ -263,7 +263,14 @@ def parse_blocks(lines, start=0, base_indent=0):
         if current_indent < base_indent:
             break
         if current_indent > base_indent:
-            break
+            # A wrapped paragraph may be indented more than its first line.
+            # Keep consuming it here; returning to the parent would stop the
+            # top-level parse before later headings are reached.
+            if blocks and blocks[-1]["type"] == "paragraph":
+                rich_text = blocks[-1]["paragraph"]["rich_text"]
+                rich_text.extend(parse_inline_text("\n" + raw_line.strip()))
+                i += 1
+                continue
 
         line = strip_indent(raw_line, base_indent)
 

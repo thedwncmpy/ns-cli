@@ -47,6 +47,7 @@ jobs:
           ./tests/test_slice11_p3.sh
           ./tests/test_slice12_status_completion.sh
           ./tests/test_slice13_bash_compat.sh
+          ./tests/test_slice26_parser_wrapped_week.sh
 
   bump-homebrew-formula:
     needs: test
