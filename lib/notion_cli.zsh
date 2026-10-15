@@ -566,12 +566,28 @@ notion_current_scope_mapping_json() {
 
   if [[ "$cwd" == "$abs_notes_root"/* ]]; then
     relative_to_root="${cwd#$abs_notes_root/}"
-    local first_segment="${relative_to_root%%/*}"
-    local relation_page_id relation_property
-    relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
-    relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
+    local segments=("${(@s:/:)relative_to_root}")
+    local segment path_prefix="" mapping_dir="" relation_page_id="" relation_property=""
+    local candidate_relation_page_id candidate_relation_property
+
+    for segment in "${segments[@]}"; do
+      if [[ -n "$path_prefix" ]]; then
+        path_prefix="$path_prefix/$segment"
+      else
+        path_prefix="$segment"
+      fi
+
+      candidate_relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$segment")"
+      if [[ -n "$candidate_relation_page_id" ]]; then
+        mapping_dir="$path_prefix"
+        relation_page_id="$candidate_relation_page_id"
+        candidate_relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$segment")"
+        relation_property="$candidate_relation_property"
+      fi
+    done
+
     if [[ -n "$relation_page_id" ]]; then
-      jq -nc --arg mapping_dir "$first_segment" --arg relation_page_id "$relation_page_id" --arg relation_property "$relation_property" \
+      jq -nc --arg mapping_dir "$mapping_dir" --arg relation_page_id "$relation_page_id" --arg relation_property "$relation_property" \
         '{mapping_dir:$mapping_dir, relation_page_id:$relation_page_id, relation_property:$relation_property}'
       return 0
     fi
