@@ -951,6 +951,11 @@ notion_resolve_sync_target() {
     return 1
   }
   first_segment="${relative_path%%/*}"
+  local mapped_segment
+  mapped_segment="$(notion_config_resolve_mapping_segment_for_path "$config_path" "$relative_path")"
+  if [[ -n "$mapped_segment" ]]; then
+    first_segment="$mapped_segment"
+  fi
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
   relation_property="$(notion_config_get_mapping_relation_property "$config_path" "$first_segment")"
   if [[ -z "$relation_page_id" ]] && ! notion_is_root_level_relative_path "$relative_path"; then
@@ -1178,13 +1183,19 @@ notion_cmd_upload() {
     return 1
   fi
 
-  # 5) Resolve first-level segment and require mapping.
+  # 5) Resolve the deepest mapped directory segment and require a mapping.
   local relative_path first_segment
   relative_path="$(notion_relative_path_under_notes_root "$abs_file" "$abs_notes_root")" || {
     notion_print_error "file must be inside notes_root: $abs_notes_root"
     return 1
   }
   first_segment="${relative_path%%/*}"
+
+  local mapped_segment
+  mapped_segment="$(notion_config_resolve_mapping_segment_for_path "$config_path" "$relative_path")"
+  if [[ -n "$mapped_segment" ]]; then
+    first_segment="$mapped_segment"
+  fi
 
   local relation_page_id relation_property
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_segment")"
@@ -1395,6 +1406,11 @@ notion_cmd_download() {
     return 1
   }
   local first_seg="${relative_path%%/*}"
+  local mapped_segment
+  mapped_segment="$(notion_config_resolve_mapping_segment_for_path "$config_path" "$relative_path")"
+  if [[ -n "$mapped_segment" ]]; then
+    first_seg="$mapped_segment"
+  fi
 
   local relation_page_id relation_property
   relation_page_id="$(notion_config_get_mapping_relation_page_id "$config_path" "$first_seg")"

@@ -118,6 +118,30 @@ notion_config_get_mapping_relation_property() {
   jq -r --arg seg "$segment" '.mappings[$seg].relation_property // "notebook"' "$config_path"
 }
 
+# Resolves the deepest mapped directory segment in a path relative to notes_root.
+# This lets archived files such as archive/September_2026/note.md retain the
+# September_2026 mapping while allowing archive itself to have a fallback mapping.
+notion_config_resolve_mapping_segment_for_path() {
+  local config_path="$1"
+  local relative_path="$2"
+  local relative_dir segment mapping_segment=""
+
+  [[ "$relative_path" == */* ]] || return 0
+  relative_dir="${relative_path%/*}"
+
+  local segments=("${(@s:/:)relative_dir}")
+  for segment in "${segments[@]}"; do
+    if [[ -n "$(notion_config_get_mapping_relation_page_id "$config_path" "$segment")" ]]; then
+      mapping_segment="$segment"
+    fi
+  done
+
+  if [[ -n "$mapping_segment" ]]; then
+    echo "$mapping_segment"
+  fi
+  return 0
+}
+
 notion_config_get_watch_default_cooldown_seconds() {
   local config_path="$1"
   jq -r '.watch.default_cooldown_seconds // .watch.cooldown_seconds // 60' "$config_path"
